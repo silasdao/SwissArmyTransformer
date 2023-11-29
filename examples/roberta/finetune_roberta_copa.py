@@ -38,10 +38,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data_b = mpu.broadcast_data(keys, data, datatype)
     # Unpack.
@@ -105,12 +102,11 @@ def create_dataset_function(path, args):
         choice1 = choice1[0].lower() + choice1[1:]
         choice2 = choice2[0].lower() + choice2[1:]
         if type=='cause':
-            sentence1 = premise + ' because ' + choice1
-            sentence2 = premise + ' because ' + choice2
+            sentence1 = f'{premise} because {choice1}'
+            sentence2 = f'{premise} because {choice2}'
         else:
-            sentence1 = premise + ' so ' + choice1
-            sentence2 = premise + ' so ' + choice2
-            pass
+            sentence1 = f'{premise} so {choice1}'
+            sentence2 = f'{premise} so {choice2}'
         pack_1 = _encode(sentence1)
         pack_2 = _encode(sentence2)
         label = int(row['label'])
@@ -123,6 +119,7 @@ def create_dataset_function(path, args):
             'attention_mask_2': np.array(pack_2['attention_mask'], dtype=np.int64),
             'label': label
         }
+
     return load_hf_dataset(path, process_fn, columns = ["input_ids_1", "position_ids_1", "attention_mask_1", "input_ids_2", "position_ids_2", "attention_mask_2", "label"], cache_dir='/dataset/fd5061f6/satDatasets', offline=True, transformer_name="copa_transformer")
 
 if __name__ == '__main__':

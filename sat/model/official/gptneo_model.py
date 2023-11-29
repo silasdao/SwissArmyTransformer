@@ -36,30 +36,27 @@ class GPTNeoAttentionMixin(BaseMixin):
                 "Only attn layer types 'global' and 'local' exist, but got `attention_type`: "
                 f"{attention_type}. Select attn layer types from ['global', 'local'] only."
             )
-        
+
         # We disable the PB-relax-Attention and only changes the order of computation, because it is enough for most of training. 
         # The implementation in the paper can be done very easily, if you really need it to train very deep transformers. 
 
         if scaling_attention_score:
             query_layer = query_layer / math.sqrt(query_layer.shape[-1])
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        
+
         '''
         2022/08/02
         Difference to SAT-Base is the causal_mask.
         '''
         query_length, key_length = query_layer.size(-2), key_layer.size(-2)
-        if attention_type == 'global':
-            bias = self.bias_global
-        else:
-            bias = self.bias_local
+        bias = self.bias_global if attention_type == 'global' else self.bias_local
         causal_mask = bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool).to(attention_scores.device)
         mask_value = torch.finfo(attention_scores.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attention_scores.dtype).to(attention_scores.device)
         attention_scores = torch.where(causal_mask, attention_scores, mask_value)
-        
+
         if log_attention_weights is not None:
             attention_scores += log_attention_weights
 
@@ -78,8 +75,7 @@ class GPTNeoAttentionMixin(BaseMixin):
             else:
                 attention_probs = attention_dropout(attention_probs)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
-        return context_layer
+        return torch.matmul(attention_probs, value_layer)
 
 class GPTNeoModel(BaseModel):
     def __init__(self, args, transformer=None, **kwargs):

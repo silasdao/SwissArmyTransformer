@@ -50,9 +50,7 @@ class PosMixin(InterpolatedPositionEmbeddingMixin):
             hidden_states, dic_buffer = self.after_position_forward(hidden_states, **kw_args)
             for k in dic_buffer:
                 kw_args['output_this_layer'][k] = dic_buffer[k]
-        output = layer(hidden_states, mask, *args, **kw_args)
-
-        return output
+        return layer(hidden_states, mask, *args, **kw_args)
 
     def random_masking(self, x, mask_ratio):
         """
@@ -140,7 +138,7 @@ class MAE(EncoderDecoderModel):
         override_attrs = ['num_layers', 'hidden_size', 'num_attention_heads',
                             'max_sequence_length', 'inner_hidden_size', 'hidden_size_per_attention_head']
         for name in override_attrs:
-            dec_attr = getattr(dec_args, 'dec_' + name, None)
+            dec_attr = getattr(dec_args, f'dec_{name}', None)
             if dec_attr is not None:  # else use encoder-config
                 setattr(dec_args, name, dec_attr)
         setattr(dec_args, 'enc_hidden_size', args.hidden_size)
@@ -168,8 +166,7 @@ class MAE(EncoderDecoderModel):
         p = self.encoder.property.patch_size
         h = w = int(x.shape[1]**.5)
         assert h * w == x.shape[1]
-        
+
         x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
         x = torch.einsum('nhwpqc->nchpwq', x)
-        imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
-        return imgs
+        return x.reshape(shape=(x.shape[0], 3, h * p, h * p))

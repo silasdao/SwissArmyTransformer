@@ -21,10 +21,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     image_data = {"image":data[0]}
     label_data = {"label":data[1]}
     timers('data loader').stop()
@@ -70,9 +67,12 @@ def create_dataset_function(path, args):
         [transforms.ToTensor(),
          transforms.Resize(384),
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    trainset = torchvision.datasets.CIFAR10(root='/'.join(path.split('/')[:-1]), train=(path.split('/')[-1]=='train'),
-                                            download=True, transform=transform)
-    return trainset
+    return torchvision.datasets.CIFAR10(
+        root='/'.join(path.split('/')[:-1]),
+        train=(path.split('/')[-1] == 'train'),
+        download=True,
+        transform=transform,
+    )
 
 def init_function(args, model):
     model.get_mixin("pos_embedding").reinit()

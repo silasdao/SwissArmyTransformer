@@ -171,11 +171,7 @@ class UnifiedTokenizer(object):
                 c = part[6:]
                 assert len(c) > 0
                 num_codes, img_path = c.split(']')
-                if num_codes == '':
-                    num_codes = 1024
-                else:
-                    num_codes = int(num_codes)
-                
+                num_codes = 1024 if num_codes == '' else int(num_codes)
                 raw_img = self.img_tokenizer.read_img(img_path, img_size=img_size)
                 img_codes = self.img_tokenizer.EncodeAsIds(raw_img) # [1, 32*32]
                 img_codes[0, num_codes:] = -1

@@ -31,12 +31,11 @@ class SatRotaryEmbedding(torch.nn.Module):
         self.learnable = learnable
         if learnable:
             self.inv_freq = torch.nn.Parameter(inv_freq)
-            self.max_seq_len_cached = None
         else:
             self.register_buffer('inv_freq', inv_freq)
-            self.max_seq_len_cached = None
             self.cos_cached = None
             self.sin_cached = None
+        self.max_seq_len_cached = None
         self.precision = precision
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
@@ -91,30 +90,30 @@ if __name__ == "__main__":
             learnable=False,
             device=device
     )
-    for i in range(10):
+    for _ in range(10):
         cos, sin = sat_rotary_emb(value, seq_len=seqlen)
         qu, ke = apply_rotary_pos_emb_index_bhs(query, key, cos, sin, position_ids)
     torch.cuda.synchronize()
     st = time.time()
-    for i in range(1000):
+    for _ in range(1000):
         cos, sin = sat_rotary_emb(value, seq_len=seqlen)
         qu, ke = apply_rotary_pos_emb_index_bhs(query, key, cos, sin, position_ids)
     torch.cuda.synchronize()
     tt = time.time() - st
     print("ref time is ", tt)
-    
-    
+
+
     rotary_emb = FastRotaryEmbedding(dim=128, device=device)
-    for i in range(1000):
+    for _ in range(1000):
         q_triton,k_triton = rotary_emb(query_neox,key_neox, position_ids, max_seqlen=seqlen)
     torch.cuda.synchronize()
     st = time.time()
-    for i in range(1000):
+    for _ in range(1000):
         q_triton,k_triton = rotary_emb(query_neox,key_neox, position_ids, max_seqlen=seqlen)
     torch.cuda.synchronize()
     tt = time.time() - st
     print("now time is ", tt)
-    
+
 
     print("max ", (q_triton - qu).abs().max().item())
     print("mean ", (q_triton - qu).abs().mean().item())

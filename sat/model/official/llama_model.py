@@ -56,18 +56,23 @@ class LLaMAMlpMixin(BaseMixin):
     def __init__(self, num_layers, in_features, hidden_features):
         super().__init__()
         hidden_features = 4 * in_features if hidden_features is None else hidden_features
-        self.gate_proj = nn.ModuleList([ColumnParallelLinear(
-            in_features,
-            hidden_features,
-            gather_output=False,
-            # init_method=init_method,
-            bias=False,
-            # params_dtype=params_dtype,
-            module=self,
-            name="dense_h_to_4h_gate",
-            # skip_init=skip_init,
-            # device=device
-        ) for i in range(num_layers)])
+        self.gate_proj = nn.ModuleList(
+            [
+                ColumnParallelLinear(
+                    in_features,
+                    hidden_features,
+                    gather_output=False,
+                    # init_method=init_method,
+                    bias=False,
+                    # params_dtype=params_dtype,
+                    module=self,
+                    name="dense_h_to_4h_gate",
+                    # skip_init=skip_init,
+                    # device=device
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
     def mlp_forward(self, hidden_states, **kw_args):
         origin = self.transformer.layers[kw_args['layer_id']].mlp

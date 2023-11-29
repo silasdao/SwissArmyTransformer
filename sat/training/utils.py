@@ -47,13 +47,13 @@ def print_args(args):
     print_rank0('arguments:', flush=True)
     for arg in vars(args):
         dots = '.' * (29 - len(arg))
-        print_rank0('  {} {} {}'.format(arg, dots, getattr(args, arg)), flush=True)
+        print_rank0(f'  {arg} {dots} {getattr(args, arg)}', flush=True)
     if args.save_args:
         os.makedirs(os.path.join(args.summary_dir, SUMMARY_WRITER_DIR_NAME), exist_ok=True)
-        with open(os.path.join(args.summary_dir, SUMMARY_WRITER_DIR_NAME, args.experiment_name+'.txt'), "w") as f:
+        with open(os.path.join(args.summary_dir, SUMMARY_WRITER_DIR_NAME, f'{args.experiment_name}.txt'), "w") as f:
             for arg in vars(args):
                 dots = '.' * (29 - len(arg))
-                f.write('  {} {} {}\n'.format(arg, dots, getattr(args, arg)))
+                f.write(f'  {arg} {dots} {getattr(args, arg)}\n')
 
 
 class Timers:
@@ -128,13 +128,10 @@ def report_memory(name):
     """Simple GPU memory report."""
 
     mega_bytes = 1024.0 * 1024.0
-    string = name + ' memory (MB)'
-    string += ' | allocated: {}'.format(
-        torch.cuda.memory_allocated() / mega_bytes)
-    string += ' | max allocated: {}'.format(
-        torch.cuda.max_memory_allocated() / mega_bytes)
-    string += ' | cached: {}'.format(torch.cuda.memory_reserved() / mega_bytes)
-    string += ' | max cached: {}'.format(
-        torch.cuda.max_memory_reserved() / mega_bytes)
+    string = f'{name} memory (MB)'
+    string += f' | allocated: {torch.cuda.memory_allocated() / mega_bytes}'
+    string += f' | max allocated: {torch.cuda.max_memory_allocated() / mega_bytes}'
+    string += f' | cached: {torch.cuda.memory_reserved() / mega_bytes}'
+    string += f' | max cached: {torch.cuda.max_memory_reserved() / mega_bytes}'
     print_rank0(string)
 

@@ -43,10 +43,7 @@ class AdapterMixin(BaseMixin):
         mlp_output = layer.mlp(layernorm_output, **kw_args)
         mlp_output = mlp_output + self.ff4[kw_args['layer_id']](nn.functional.gelu(self.ff3[kw_args['layer_id']](mlp_output)))
 
-        # Second residual connection.
-        output = layernorm_output + mlp_output
-
-        return output
+        return layernorm_output + mlp_output
 
     def reinit(self, parent_model=None):
         # refer to https://github.com/google-research/adapter-bert/blob/1a31fc6e92b1b89a6530f48eb0f9e1f04cc4b750/modeling.py#L321

@@ -27,10 +27,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data_b = mpu.broadcast_data(keys, data, datatype)
     # Unpack.
@@ -42,7 +39,7 @@ def get_batch(data_iterator, args, timers):
     # Convert
     if args.fp16:
         attention_mask = attention_mask.half()
-    
+
     return tokens, labels, attention_mask, position_ids, (tokens!=1)
 
 

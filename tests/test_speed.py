@@ -14,7 +14,7 @@ def test_speed():
     )).cuda()
     data = torch.zeros(4, 1024, dtype=torch.long).cuda()
     start = time.time()
-    for i in range(100):
+    for _ in range(100):
         with torch.no_grad():
             model(data, data, None)
     print('average time: ', (time.time() - start) / 100, 's')

@@ -119,7 +119,7 @@ class ResBlock(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, in_channel, channel, n_res_block, n_res_channel, stride, embed_dim, n_embed, simple):
         super().__init__()
-        
+
         if stride == 6:
             if simple:
                 blocks = [
@@ -138,7 +138,7 @@ class Encoder(nn.Module):
                     nn.Conv2d(channel //2, channel, 4, stride=2, padding=1),
                 ]
 
-            
+
         elif stride == 4:
             blocks = [
                 nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding=1),
@@ -155,7 +155,7 @@ class Encoder(nn.Module):
                 nn.Conv2d(channel // 2, channel, 3, padding=1),
             ]
 
-        for i in range(n_res_block):
+        for _ in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
 
         blocks.append(nn.ReLU(inplace=True))
@@ -174,10 +174,8 @@ class Decoder(nn.Module):
         blocks = [
             nn.ConvTranspose2d(in_channel, channel, 4, stride=2, padding=1),
         ]
-        
-        for i in range(n_res_block):
-            blocks.append(ResBlock(channel, n_res_channel))
 
+        blocks.extend(ResBlock(channel, n_res_channel) for _ in range(n_res_block))
         blocks.append(nn.ReLU(inplace=True))
 
         if stride == 4 and simple:
@@ -345,9 +343,8 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10, dim=-1):
         index = y_soft.max(dim, keepdim=True)[1]
         y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
         ret = y_hard - y_soft.detach() + y_soft
-        return ret, index
     else:
         # Reparametrization trick.
         ret = y_soft
         index = y_soft.max(dim, keepdim=True)[1]
-        return ret, index
+    return ret, index

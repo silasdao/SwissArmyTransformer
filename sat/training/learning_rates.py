@@ -48,20 +48,19 @@ class AnnealingLR(_LRScheduler):
             auto_lr = float(self.start_lr) * self.auto_warmup_rate
             scheduled_lr = float(self.start_lr) * self.num_iters / self.warmup_iter
             return min(auto_lr, scheduled_lr)
-        
+
         if self.warmup_iter > 0 and self.num_iters <= self.warmup_iter:
             return float(self.start_lr) * self.num_iters / self.warmup_iter
+        if self.decay_style == self.DECAY_STYLES[0]:
+            return self.start_lr*((self.end_iter-(self.num_iters-self.warmup_iter))/self.end_iter)
+        elif self.decay_style == self.DECAY_STYLES[1]:
+            decay_step_ratio = min(1.0, (self.num_iters - self.warmup_iter) / self.end_iter)
+            return self.start_lr / self.decay_ratio * (
+                    (math.cos(math.pi * decay_step_ratio) + 1) * (self.decay_ratio - 1) / 2 + 1)
+        elif self.decay_style == self.DECAY_STYLES[2]:
+            return self.start_lr
         else:
-            if self.decay_style == self.DECAY_STYLES[0]:
-                return self.start_lr*((self.end_iter-(self.num_iters-self.warmup_iter))/self.end_iter)
-            elif self.decay_style == self.DECAY_STYLES[1]:
-                decay_step_ratio = min(1.0, (self.num_iters - self.warmup_iter) / self.end_iter)
-                return self.start_lr / self.decay_ratio * (
-                        (math.cos(math.pi * decay_step_ratio) + 1) * (self.decay_ratio - 1) / 2 + 1)
-            elif self.decay_style == self.DECAY_STYLES[2]:
-                return self.start_lr
-            else:
-                return self.start_lr
+            return self.start_lr
 
     def step(self, step_num=None):
         if step_num is None:
@@ -72,15 +71,14 @@ class AnnealingLR(_LRScheduler):
             group['lr'] = new_lr * scale
 
     def state_dict(self):
-        sd = {
-                'start_lr': self.start_lr,
-                'warmup_iter': self.warmup_iter,
-                'num_iters': self.num_iters,
-                'decay_style': self.decay_style,
-                'end_iter': self.end_iter,
-                'decay_ratio': self.decay_ratio
+        return {
+            'start_lr': self.start_lr,
+            'warmup_iter': self.warmup_iter,
+            'num_iters': self.num_iters,
+            'decay_style': self.decay_style,
+            'end_iter': self.end_iter,
+            'decay_ratio': self.decay_ratio,
         }
-        return sd
 
     def load_state_dict(self, sd):
         pass # disable this 

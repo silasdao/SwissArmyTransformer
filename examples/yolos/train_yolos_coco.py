@@ -22,16 +22,13 @@ def get_batch(data_iterator, args, timers, mode):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     image_data = {"image":data[0]}
     label_data = {"label":data[1]}
     timers('data loader').stop()
     # image_data = mpu.broadcast_data(["image"], image_data, torch.float32)
     # label_data = mpu.broadcast_data(["label"], label_data, torch.float32)
-    
+
 
     # Unpack.
     label_data = label_data['label']
@@ -45,9 +42,7 @@ def get_batch(data_iterator, args, timers, mode):
     keep_key = ['image_id', 'orig_size', 'size']
     for i in range(label_data['mask'].shape[0]):
         ori_img.append(ToPILImage()(image_data[i]))
-        target = {}
-        for k in slice_key:
-            target[k] = label_data[k][i][label_data['mask'][i]]
+        target = {k: label_data[k][i][label_data['mask'][i]] for k in slice_key}
         for k in keep_key:
             target[k] = label_data[k][i]
         ori_label.append(target)
@@ -59,10 +54,6 @@ def get_batch(data_iterator, args, timers, mode):
     image_data, label_data = list(zip(*[transform(x,y) for x, y in zip(image_data, label_data)]))
     image_data = nested_tensor_from_tensor_list(image_data).tensors
 
-    # Convert
-    # if args.fp16: # fp16 not supported for matcher
-    #     image_data = image_data.half()
-        # label_data = [{k:v.half() for k,v in x.items()} for x in label_data]
     # print(image_data)
     # print(label_data)
     # input()
@@ -93,12 +84,14 @@ def forward_step(data_iterator, model, args, timers):
     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
     outputs = model(**encoded_input, offline=False, height=height//16, width=width//16)[0]
-    
+
     matcher = build_matcher(args)
 
-    weight_dict = {'loss_ce': 1, 'loss_bbox': args.bbox_loss_coef}
-    weight_dict['loss_giou'] = args.giou_loss_coef
-
+    weight_dict = {
+        'loss_ce': 1,
+        'loss_bbox': args.bbox_loss_coef,
+        'loss_giou': args.giou_loss_coef,
+    }
     losses = ['labels', 'boxes', 'cardinality']
     criterion = SetCriterion(91, matcher=matcher, weight_dict=weight_dict,
                              eos_coef=args.eos_coef, losses=losses)

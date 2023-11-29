@@ -71,10 +71,7 @@ class TSVDataset(Dataset):
     def __init__(self, path, process_fn, with_heads=True, **kwargs):
         self.process_fn = process_fn
         with open(path, 'r') as fin:
-            if with_heads:
-                self.heads = fin.readline().split('\t')
-            else:
-                self.heads = None
+            self.heads = fin.readline().split('\t') if with_heads else None
             self.items = [line.split('\t') for line in fin]
 
     def __len__(self):

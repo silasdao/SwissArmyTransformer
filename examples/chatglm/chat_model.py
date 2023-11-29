@@ -177,15 +177,15 @@ class ChatModel(nn.Module, GenerationMixin):
         else:
             prompt = ""
             for i, (old_query, response) in enumerate(history):
-                prompt += "[Round {}]\n问：{}\n答：{}\n".format(i, old_query, response)
-            prompt += "[Round {}]\n问：{}\n答：".format(len(history), query)
+                prompt += f"[Round {i}]\n问：{old_query}\n答：{response}\n"
+            prompt += f"[Round {len(history)}]\n问：{query}\n答："
         inputs = tokenizer([prompt], return_tensors="pt")
         inputs = inputs.to(self.device)
         outputs = self.generate(**inputs, **gen_kwargs)
         outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
         response = tokenizer.decode(outputs)
         response = self.process_response(response)
-        history = history + [(query, response)]
+        history += [(query, response)]
         return response, history
     
     @torch.no_grad()
@@ -196,5 +196,4 @@ class ChatModel(nn.Module, GenerationMixin):
         inputs = tokenizer(queries, return_tensors="pt", padding=True)
         inputs = {k:v.to(self.device) for k, v in inputs.items()}
         outputs = self.generate(**inputs, **gen_kwargs)
-        texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        return texts
+        return tokenizer.batch_decode(outputs, skip_special_tokens=True)

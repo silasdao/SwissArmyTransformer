@@ -418,7 +418,9 @@ class BaseTransformer(torch.nn.Module):
         self.checkpoint_activations = checkpoint_activations
         self.checkpoint_num_layers = checkpoint_num_layers
         self.checkpoint_skip_layers = checkpoint_skip_layers
-        assert checkpoint_skip_layers <= num_layers - checkpoint_num_layers, f'checkpoint_skip_layers too large. Please consider remove checkpoint_activations.'
+        assert (
+            checkpoint_skip_layers <= num_layers - checkpoint_num_layers
+        ), 'checkpoint_skip_layers too large. Please consider remove checkpoint_activations.'
         self.max_sequence_length = max_sequence_length
         self.layernorm_order = layernorm_order
         self.row_parallel_linear_final_bias = row_parallel_linear_final_bias

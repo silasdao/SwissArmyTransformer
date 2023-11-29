@@ -81,8 +81,6 @@ class Tokenization(object):
             elif idx == len(self.tokenization) - 1:
                 self.text += other.token
                 self.original_text += other.token
-        elif isinstance(other, Tokenization):
-            self.tokenization = self.tokenization[:idx] + other.tokenization + self.tokenization[idx:]
         else:
             self.tokenization = self.tokenization[:idx] + other.tokenization + self.tokenization[idx:]
 
@@ -175,7 +173,7 @@ class Tokenizer(object):
             self.num_tokens = len(self.tokens)
 
         self._text_tokens = list(self.text_tokenizer.tokens)
-        self._text_token_vocab = {t: Id for t, Id in self.text_tokenizer.vocab.items()}
+        self._text_token_vocab = dict(self.text_tokenizer.vocab.items())
 
         self._command_token_tokens = list(self.command_token_map.keys())
         self._command_token_vocab = {t: Id for Id, t in self.command_id_map.items()}
@@ -260,8 +258,6 @@ class Tokenizer(object):
                 elif i == len(split_text) - 1:
                     if sub_text:
                         result.append(sub_text)
-                    else:
-                        pass
                 else:
                     if sub_text:
                         result.append(sub_text)
@@ -320,15 +316,11 @@ class Tokenizer(object):
 
     def IdToToken(self, idx):
         """convert Id to token accounting for command tokens"""
-        if isinstance(idx, CommandToken):
-            return idx.token
-        return self.tokens[idx]
+        return idx.token if isinstance(idx, CommandToken) else self.tokens[idx]
 
     def TokenToId(self, token):
         """convert token to Id accounting for command tokens"""
-        if isinstance(token, CommandToken):
-            return token.Id
-        return self.vocab[token]
+        return token.Id if isinstance(token, CommandToken) else self.vocab[token]
 
     def DecodeIds(self, ids):
         """
@@ -356,8 +348,7 @@ class Tokenizer(object):
             output = ' '.join(rtn_strs)
         else:
             output = "".join(rtn_strs)
-        output = self.clean_up_tokenization(output)
-        return output
+        return self.clean_up_tokenization(output)
 
     def DecodeTokens(self, tokens):
         """
@@ -447,10 +438,7 @@ class ChineseSPTokenizer(Tokenizer):
                 CommandToken('sop', '<|startofpiece|>', num_tokens + 1),
                 CommandToken('eop', '<|endofpiece|>', num_tokens + 2)
             ])
-            if model_type_or_path != 'glm-10b':
-                num_tokens += 3
-            else:
-                num_tokens += 2
+            num_tokens += 3 if model_type_or_path != 'glm-10b' else 2
             if add_task_mask:
                 if model_type_or_path != 'glm-10b':
                     command_tokens.extend([
@@ -473,12 +461,10 @@ class ChineseSPTokenizer(Tokenizer):
             self.spaces_between_special_tokens = False
 
     def _encode(self, text):
-        ids = self.text_tokenizer.encode(text)
-        return ids
+        return self.text_tokenizer.encode(text)
 
     def _decode(self, ids):
-        text = self.text_tokenizer.decode(ids)
-        return text
+        return self.text_tokenizer.decode(ids)
 
 
 class BertWordPieceTokenizer(Tokenizer):
@@ -490,7 +476,10 @@ class BertWordPieceTokenizer(Tokenizer):
     def __init__(self, tokenizer_model_type=None, cache_dir=None, add_block_symbols=False, add_sentinel_token=0,
                  add_task_mask=False, add_decoder_mask=False, added_command_tokens=None, **kwargs):
         # default to bert-large-uncased tokenizer
-        do_lower_case = not ('-cased' in tokenizer_model_type or 'chinese' in tokenizer_model_type)
+        do_lower_case = (
+            '-cased' not in tokenizer_model_type
+            and 'chinese' not in tokenizer_model_type
+        )
         text_tokenizer = BertTokenizer.from_pretrained(tokenizer_model_type, do_lower_case=do_lower_case,
                                                        cache_dir=cache_dir)
         # disable max len warnings by increasing max len
@@ -539,8 +528,7 @@ class BertWordPieceTokenizer(Tokenizer):
 
     def _encode(self, text):
         tokens = self.text_tokenizer.tokenize(text)
-        ids = self.text_tokenizer.convert_tokens_to_ids(tokens)
-        return ids
+        return self.text_tokenizer.convert_tokens_to_ids(tokens)
 
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
@@ -553,19 +541,18 @@ class BertWordPieceTokenizer(Tokenizer):
         Returns:
             :obj:`str`: The cleaned-up string.
         """
-        out_string = (
+        return (
             out_string.replace(" .", ".")
-                .replace(" ?", "?")
-                .replace(" !", "!")
-                .replace(" ,", ",")
-                .replace(" ' ", "'")
-                .replace(" n't", "n't")
-                .replace(" 'm", "'m")
-                .replace(" 's", "'s")
-                .replace(" 've", "'ve")
-                .replace(" 're", "'re")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
         )
-        return out_string
 
     def _decode(self, ids):
         Tokens = []
@@ -576,9 +563,8 @@ class BertWordPieceTokenizer(Tokenizer):
                 Tokens.append(self.text_tokenizer.tokens[Id])
         new_tokens = []
         for token in Tokens:
-            if token.startswith('##') and len(new_tokens) > 0:
+            if token.startswith('##') and new_tokens:
                 new_tokens[-1] += token[2:]
             else:
                 new_tokens.append(token)
-        output = ' '.join(new_tokens)
-        return output
+        return ' '.join(new_tokens)

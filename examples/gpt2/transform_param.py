@@ -30,11 +30,11 @@ args = argparse.Namespace(
     rank=0,
     skip_init=False,
     use_gpu_initialization=True,
-    save='sat_'+model_type,
+    save=f'sat_{model_type}',
     deepspeed=None,
     mode='inference',
-    tokenizer_type=model_type
-    )
+    tokenizer_type=model_type,
+)
 
 import os
 os.makedirs(args.save, exist_ok=True)
@@ -43,7 +43,7 @@ import deepspeed
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', '127.0.0.1')
 master_port = os.getenv('MASTER_PORT', '16666')
-init_method += master_ip + ':' + master_port
+init_method += f'{master_ip}:{master_port}'
 torch.distributed.init_process_group(
         backend='nccl',
         world_size=args.world_size, rank=args.rank, init_method=init_method)
@@ -72,14 +72,10 @@ def copy_layer_param(src, dst):
         assert (dst_dic[k].data == src_dic[k].data).all()
 
 def copy_layer_norm(src, dst):
-    src_ln = []
-    for k, v in src.named_parameters():
-        if 'ln' in k.lower():
-            src_ln.append((k, v))
-    dst_ln = []
-    for k, v in dst.named_parameters():
-        if 'layernorm' in k.lower():
-            dst_ln.append((k, v))
+    src_ln = [(k, v) for k, v in src.named_parameters() if 'ln' in k.lower()]
+    dst_ln = [
+        (k, v) for k, v in dst.named_parameters() if 'layernorm' in k.lower()
+    ]
     assert len(src_ln) == len(dst_ln)
     for kvs, kvd in zip(src_ln, dst_ln):
         assert kvd[1].data.shape == kvs[1].data.shape

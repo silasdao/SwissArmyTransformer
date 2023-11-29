@@ -56,7 +56,9 @@ def training_main(args, model_cls, forward_step_function, create_dataset_functio
     if args.load and args.mode == 'pretrain':  # continue training
         args.experiment_name = os.path.basename(os.path.normpath(args.load))
     else:
-        args.experiment_name = args.experiment_name + '-' +datetime.now().strftime("%m-%d-%H-%M")
+        args.experiment_name = (
+            f'{args.experiment_name}-' + datetime.now().strftime("%m-%d-%H-%M")
+        )
 
     # Pytorch distributed. must before seed. ALREADY MOVED TO arguments.py!
     # if isinstance(model_cls, type):
@@ -79,13 +81,7 @@ def training_main(args, model_cls, forward_step_function, create_dataset_functio
         model = model_cls
 
     # Config model IO
-    if args.load is not None:
-        args.iteration = load_checkpoint(model, args)
-        # if we don't load optim_states, filelock is no more needed.
-        # with FileLock("/root/checkpoint_lock", timeout=-1):
-        #     args.iteration = load_checkpoint(model, optimizer, args)
-    else:
-        args.iteration = 0
+    args.iteration = load_checkpoint(model, args) if args.load is not None else 0
     if args.save:
         args.save = os.path.join(args.save, args.experiment_name)
     torch.distributed.barrier()
@@ -215,10 +211,7 @@ def get_params_for_weight_decay_optimization(module):
             for n, p in module_._parameters.items():
                 if p is not None and n == 'bias' and p.requires_grad:
                     add_param_by_lr(no_weight_decay_params, p, no_weight_decay=True)
-    ret = []
-    for v in weight_decay_params.values():
-        if len(v['params']) != 0:
-            ret.append(v)
+    ret = [v for v in weight_decay_params.values() if len(v['params']) != 0]
     for v in no_weight_decay_params.values():
         if len(v['params']) != 0:
             ret.append(v)
@@ -255,36 +248,28 @@ def get_learning_rate_scheduler(optimizer, iteration, args,
     # lr = auto_warmup_rate * args.lr.
     # This overrides other rules.
     warmup_iter = args.warmup * num_iters
-    lr_scheduler = AnnealingLR(optimizer,
-                               start_lr=args.lr,
-                               warmup_iter=warmup_iter,
-                               num_iters=num_iters,
-                               decay_style=args.lr_decay_style,
-                               last_iter=init_step,
-                               decay_ratio=args.lr_decay_ratio,
-                               auto_warmup_steps=auto_warmup_steps,
-                               auto_warmup_rate=auto_warmup_rate
-                               )
-
-    return lr_scheduler
+    return AnnealingLR(
+        optimizer,
+        start_lr=args.lr,
+        warmup_iter=warmup_iter,
+        num_iters=num_iters,
+        decay_style=args.lr_decay_style,
+        last_iter=init_step,
+        decay_ratio=args.lr_decay_ratio,
+        auto_warmup_steps=auto_warmup_steps,
+        auto_warmup_rate=auto_warmup_rate,
+    )
 
 
 def train(model, optimizer, lr_scheduler,
         train_data, val_data, timers, args, 
         summary_writer=None, hooks={}):
     """Train the model."""
-    if train_data is not None:
-        train_data_iterator = iter(train_data)
-    else:
-        train_data_iterator = None
-    if val_data is not None:
-        val_data_iterator = iter(val_data)
-    else:
-        val_data_iterator = None
-        
+    train_data_iterator = iter(train_data) if train_data is not None else None
+    val_data_iterator = iter(val_data) if val_data is not None else None
     # Turn on training mode which enables dropout.
     model.train()
-    
+
     # Tracking loss.
     total_lm_loss = 0.0
     total_metrics = defaultdict(float)
@@ -307,7 +292,7 @@ def train(model, optimizer, lr_scheduler,
         # Update losses.
         total_lm_loss += lm_loss.data.detach().float()
         for name in metrics:
-            if not 'eval' in name:
+            if 'eval' not in name:
                 assert len(metrics[name].shape)==0, 'metrics without eval must be scalar'
                 total_metrics[name] += metrics[name].data.detach().float().item()
 
@@ -315,11 +300,10 @@ def train(model, optimizer, lr_scheduler,
         if args.iteration % args.log_interval == 0:
             learning_rate = optimizer.param_groups[0]['lr']
             avg_lm_loss = total_lm_loss.item() / args.log_interval
-            # average img & txt loss
-            avg_metrics = {}
-            for key in total_metrics:
-                avg_metrics[key] = total_metrics[key] / args.log_interval
-
+            avg_metrics = {
+                key: total_metrics[key] / args.log_interval
+                for key in total_metrics
+            }
             elapsed_time = timers('interval time').elapsed()
             report_iteration_metrics(summary_writer, optimizer, learning_rate, avg_lm_loss,
                                      elapsed_time * 1000.0 / args.log_interval, args.iteration, args.train_iters, args,
@@ -327,7 +311,7 @@ def train(model, optimizer, lr_scheduler,
             total_lm_loss = 0.0
             total_metrics = defaultdict(float)
             if report_memory_flag:
-                report_memory('after {} iterations'.format(args.iteration))
+                report_memory(f'after {args.iteration} iterations')
                 report_memory_flag = False
 
             timers.log(['forward', 'backward', 'allreduce', 'optimizer',
@@ -344,7 +328,7 @@ def train(model, optimizer, lr_scheduler,
                 eval_iters = len(val_data)
             else:
                 eval_iters = args.eval_iters
-            prefix = 'iteration {}'.format(args.iteration)
+            prefix = f'iteration {args.iteration}'
             evaluate_and_print_results(
                 prefix, val_data_iterator, model, eval_iters, args, timers, False, step=args.iteration, split='val', summary_writer=summary_writer, hooks=hooks)
 
@@ -352,8 +336,10 @@ def train(model, optimizer, lr_scheduler,
             torch.distributed.barrier()
             time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             rank = torch.distributed.get_rank()
-            print_all('rank: {} | time: {} | exiting the program at iteration {}'.
-                  format(rank, time_str, args.iteration), flush=True)
+            print_all(
+                f'rank: {rank} | time: {time_str} | exiting the program at iteration {args.iteration}',
+                flush=True,
+            )
             exit()
 
     return args.iteration, skipped_iters
@@ -385,7 +371,7 @@ def train_step(data_iterator, model, optimizer, lr_scheduler,
 
         loss_checker = lm_loss_reduced
         for name in metrics:
-            if not 'eval' in name:
+            if 'eval' not in name:
                 metrics[name] = metrics[name].detach().clone()
                 torch.distributed.all_reduce(metrics[name].data)
                 metrics[name].data /= args.world_size
@@ -408,18 +394,17 @@ def train_step(data_iterator, model, optimizer, lr_scheduler,
         # Update parameters.
         skipped_iter, complete = 0, False
         timers('optimizer').start()
-        if args.deepspeed:
-            if model.is_gradient_accumulation_boundary():
-                model.step()
-                complete = True
-                if not (args.fp16 and optimizer.overflow):
-                    lr_scheduler.step()
-                else:
-                    skipped_iter = 1
-            else:
-                model.step()
-        else:
+        if not args.deepspeed:
             raise ValueError('Currently, we only support training with deepspeed.')
+        if model.is_gradient_accumulation_boundary():
+            model.step()
+            complete = True
+            if not args.fp16 or not optimizer.overflow:
+                lr_scheduler.step()
+            else:
+                skipped_iter = 1
+        else:
+            model.step()
         timers('optimizer').stop()
         if complete or single_step:
             break
@@ -464,7 +449,7 @@ def evaluate(data_iterator, model, eval_iters, args, timers, split, verbose=Fals
         while iteration < eval_iters:
             iteration += 1
             if verbose and iteration % args.log_interval == 0:
-                print_rank0('Evaluating iter {}/{}'.format(iteration, eval_iters))
+                print_rank0(f'Evaluating iter {iteration}/{eval_iters}')
             # Forward evaluation.
             # try:
             lm_loss, metrics = forward_step(data_iterator, model, args, timers)
@@ -475,20 +460,20 @@ def evaluate(data_iterator, model, eval_iters, args, timers, split, verbose=Fals
             if args.deepspeed and args.deepspeed_activation_checkpointing:
                 deepspeed.checkpointing.reset()
             total_lm_loss += lm_loss.data.detach().float().item()
-            is_last = True if iteration == eval_iters and args.strict_eval and len(last_shape)>0 else False
+            is_last = bool(
+                iteration == eval_iters
+                and args.strict_eval
+                and len(last_shape) > 0
+            )
             for name in metrics:
                 if name not in metrics_total:
                     metrics_total[name] = []
-                is_scalar[name] = True if len(metrics[name].shape)==0 else False
+                is_scalar[name] = len(metrics[name].shape) == 0
                 shape = list(metrics[name].shape)
                 if not is_scalar[name] and is_last and metrics[name].shape[0] != last_shape[0]:
                     # pad tensor's first dim to args.batch_size
                     metrics[name] = torch.concat([metrics[name], torch.zeros([last_shape[0]-metrics[name].shape[0]] + shape[1:], dtype=metrics[name].dtype, device=metrics[name].device)])
-                if rank==0:
-                    metrics_gathered = [torch.zeros_like(metrics[name], dtype=metrics[name].dtype, device=metrics[name].device) for _ in range(args.world_size)]
-                else:
-                    # metrics_gathered = None
-                    metrics_gathered = [torch.zeros_like(metrics[name], dtype=metrics[name].dtype, device=metrics[name].device) for _ in range(args.world_size)]
+                metrics_gathered = [torch.zeros_like(metrics[name], dtype=metrics[name].dtype, device=metrics[name].device) for _ in range(args.world_size)]
                 # torch.distributed.gather(metrics[name], metrics_gathered, 0)
                 torch.distributed.all_gather(metrics_gathered, metrics[name])
 
@@ -531,8 +516,9 @@ def evaluate_and_print_results(prefix, data_iterator, model, eval_iters,
 
 
 def report_iteration_metrics(summary_writer, optimizer, lr, loss, elapsed_time, step, total_step, args, avg_metrics):
-    log_string = ' iteration {:8d}/{:8d} |'.format(step, total_step)
-    log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(elapsed_time)
+    log_string = ' iteration {:8d}/{:8d} |'.format(
+        step, total_step
+    ) + ' elapsed time per iteration (ms): {:.1f} |'.format(elapsed_time)
     log_string += ' learning rate {:.3E} |'.format(lr)
     log_string += ' total loss {:.6E} |'.format(loss)
     for key in avg_metrics:
@@ -544,16 +530,15 @@ def report_iteration_metrics(summary_writer, optimizer, lr, loss, elapsed_time, 
         (args.gradient_accumulation_steps * args.batch_size / args.model_parallel_size / (elapsed_time / 60000.0)))
     print_rank0(log_string)
     if summary_writer is not None:
-        summary_writer.add_scalar(f'Train/lr', lr, step)
-        summary_writer.add_scalar(f'Train/train_loss', loss, step)
-        summary_writer.add_scalar(f'Train/elapsed_time', elapsed_time, step)
+        summary_writer.add_scalar('Train/lr', lr, step)
+        summary_writer.add_scalar('Train/train_loss', loss, step)
+        summary_writer.add_scalar('Train/elapsed_time', elapsed_time, step)
         for key in avg_metrics:
-            summary_writer.add_scalar('Train/'+key, avg_metrics[key], step)
+            summary_writer.add_scalar(f'Train/{key}', avg_metrics[key], step)
 
 
 def report_evaluate_metrics(summary_writer, prefix, loss, ppl, step, avg_metrics):
-    string = ' validation loss at {} | '.format(prefix)
-    string += 'loss: {:.6E} | '.format(loss)
+    string = f' validation loss at {prefix} | ' + 'loss: {:.6E} | '.format(loss)
     string += 'PPL: {:.6E}'.format(ppl)
     for key in avg_metrics:
         string += ' {} {:.6E} |'.format(key, avg_metrics[key].item())
@@ -563,8 +548,8 @@ def report_evaluate_metrics(summary_writer, prefix, loss, ppl, step, avg_metrics
     print_rank0(string)
     print_rank0('-' * length)
     if summary_writer is not None:
-        summary_writer.add_scalar(f'Train/valid_ppl', ppl, step)
-        summary_writer.add_scalar(f'Train/valid_loss', loss, step)
+        summary_writer.add_scalar('Train/valid_ppl', ppl, step)
+        summary_writer.add_scalar('Train/valid_loss', loss, step)
         for key in avg_metrics:
-            summary_writer.add_scalar('Train/valid_'+key, avg_metrics[key], step)
+            summary_writer.add_scalar(f'Train/valid_{key}', avg_metrics[key], step)
         

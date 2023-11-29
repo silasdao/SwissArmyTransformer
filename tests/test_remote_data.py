@@ -25,8 +25,7 @@ args = get_args(['--batch-size', str(args.batch_size),
     ])
 
 def process_fn(src):
-    for x in src:
-        yield x
+    yield from src
 
 def create_func(path, args):
     return SimpleDistributedWebDataset(path, process_fn, seed=0)

@@ -6,6 +6,7 @@
 @Contact :   dm18@mails.tsinghua.edu.cn
 '''
 
+
 # here put the import lib
 import os
 import sys
@@ -28,10 +29,16 @@ for name, path in avaliable_ops.items():
     # define some objects with the same name as the ops
     # so that we can use them as a placeholder
     # when __call__() is called, the real ops will be imported and called
-    locals()[name] = type(name + 'Shell', (object,), {
-        '__init__': lambda self, *args, **kwargs: None,
-        '__call__': lambda self, *args, **kwargs: getattr(import_module(self.path), self.name)(*args, **kwargs),
-        'name': name,
-        'path': path,
-    })()
+    locals()[name] = type(
+        f'{name}Shell',
+        (object,),
+        {
+            '__init__': lambda self, *args, **kwargs: None,
+            '__call__': lambda self, *args, **kwargs: getattr(
+                import_module(self.path), self.name
+            )(*args, **kwargs),
+            'name': name,
+            'path': path,
+        },
+    )()
 

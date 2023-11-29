@@ -12,24 +12,24 @@ from sat.model.transformer import RowParallelLinear, ColumnParallelLinear
 
 class HackLinear(nn.Linear):
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        if prefix + 'weight' in state_dict:
-            self.weight.data.copy_(state_dict[prefix+'weight'])
-        if prefix + 'bias' in state_dict:
-            self.bias.data.copy_(state_dict[prefix+'bias'])
+        if f'{prefix}weight' in state_dict:
+            self.weight.data.copy_(state_dict[f'{prefix}weight'])
+        if f'{prefix}bias' in state_dict:
+            self.bias.data.copy_(state_dict[f'{prefix}bias'])
 
 class HackRowParallelLinear(RowParallelLinear):
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        if prefix + 'weight' in state_dict:
-            self.weight.data.copy_(state_dict[prefix+'weight'])
-        if prefix + 'bias' in state_dict:
-            self.bias.data.copy_(state_dict[prefix+'bias'])
+        if f'{prefix}weight' in state_dict:
+            self.weight.data.copy_(state_dict[f'{prefix}weight'])
+        if f'{prefix}bias' in state_dict:
+            self.bias.data.copy_(state_dict[f'{prefix}bias'])
 
 class HackColumnParallelLinear(ColumnParallelLinear):
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-        if prefix + 'weight' in state_dict:
-            self.weight.data.copy_(state_dict[prefix+'weight'])
-        if prefix + 'bias' in state_dict:
-            self.bias.data.copy_(state_dict[prefix+'bias'])
+        if f'{prefix}weight' in state_dict:
+            self.weight.data.copy_(state_dict[f'{prefix}weight'])
+        if f'{prefix}bias' in state_dict:
+            self.bias.data.copy_(state_dict[f'{prefix}bias'])
 
 try:
     from bitsandbytes.nn import LinearNF4
@@ -43,15 +43,15 @@ try:
                 dst[i] = src[i]
     class HackLinearNF4(LinearNF4):
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-            if prefix + 'weight' in state_dict:
-                self.weight.data.copy_(state_dict[prefix+'weight'])
+            if f'{prefix}weight' in state_dict:
+                self.weight.data.copy_(state_dict[f'{prefix}weight'])
                 if self.weight.data.dtype == torch.uint8:
-                    copy_nested_list(state_dict[prefix+'quant_state'], self.weight.quant_state)
-            if prefix + 'bias' in state_dict:
-                self.bias.data.copy_(state_dict[prefix+'bias'])
+                    copy_nested_list(state_dict[f'{prefix}quant_state'], self.weight.quant_state)
+            if f'{prefix}bias' in state_dict:
+                self.bias.data.copy_(state_dict[f'{prefix}bias'])
         def _save_to_state_dict(self, destination, prefix, keep_vars):
             super()._save_to_state_dict(destination, prefix, keep_vars)
-            destination[prefix+'quant_state'] = self.weight.quant_state
+            destination[f'{prefix}quant_state'] = self.weight.quant_state
 except Exception as exception:
     print_all("Failed to load bitsandbytes:" + str(exception), level='WARNING')
 
@@ -110,7 +110,7 @@ class LoraLinear(nn.Module):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         # This is not a perfect version, becuase it doesn't handle errors and unexpected keys.
-        if prefix + 'weight' in state_dict:
+        if f'{prefix}weight' in state_dict:
             # load from normal Linear
             self.original._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
         else:
@@ -119,9 +119,10 @@ class LoraLinear(nn.Module):
             
     def forward(self, x):
         mixed_raw_layer = self.original(x)
-        lora_outputs = []
-        for mA, mB in zip(self.matrix_A, self.matrix_B):
-            lora_outputs.append((self.lora_dropout(x) @ mA.T @ mB.T) * self.scaling)
+        lora_outputs = [
+            (self.lora_dropout(x) @ mA.T @ mB.T) * self.scaling
+            for mA, mB in zip(self.matrix_A, self.matrix_B)
+        ]
         mixed_raw_layer = mixed_raw_layer + torch.cat(lora_outputs, -1)
 
         return mixed_raw_layer
@@ -153,9 +154,10 @@ def merge_linear_lora(lin):
         new_lin = HackLinearNF4(in_dim, out_dim, bias=lin.original.bias is not None)
     if lin.original.bias is not None:
         new_lin.bias.data = lin.original.bias.data
-    new_qkv = []
-    for mA, mB in zip(lin.matrix_A, lin.matrix_B):
-        new_qkv.append(mA.data.T.float() @ mB.data.T.float() * lin.scaling)
+    new_qkv = [
+        mA.data.T.float() @ mB.data.T.float() * lin.scaling
+        for mA, mB in zip(lin.matrix_A, lin.matrix_B)
+    ]
     new_qkv = torch.cat(new_qkv, -1)
     guess_type = lin.original.bias.data.dtype if lin.original.bias is not None else lin.original.weight.data.dtype
     if guess_type is torch.uint8:
@@ -178,7 +180,7 @@ class LoraMixin(BaseMixin):
         self.lora_dropout = lora_dropout
 
         if layer_range is None:
-            layer_range = [i for i in range(layer_num)]
+            layer_range = list(range(layer_num))
         self.layer_range = layer_range
 
         self.scaling = self.lora_alpha / self.r

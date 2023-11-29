@@ -181,12 +181,11 @@ class QuantizedColumnParallelLinear(ColumnParallelLinear):
         output_parallel = W8A16Linear.apply(input_parallel, self.weight, self.weight_scale, self.weight_bit_width)
         if self.bias is not None:
             output_parallel = output_parallel + self.bias
-        if self.gather_output:
-            # All-gather across the partitions.
-            output = gather_from_model_parallel_region(output_parallel)
-        else:
-            output = output_parallel
-        return output
+        return (
+            gather_from_model_parallel_region(output_parallel)
+            if self.gather_output
+            else output_parallel
+        )
 
 
 class QuantizedRowParallelLinear(RowParallelLinear):
@@ -221,11 +220,7 @@ class QuantizedRowParallelLinear(RowParallelLinear):
         output_parallel = W8A16Linear.apply(input_parallel, self.weight, self.weight_scale, self.weight_bit_width)
         # All-reduce across all the partitions.
         output_ = reduce_from_model_parallel_region(output_parallel)
-        if self.bias is not None:
-            output = output_ + self.bias
-        else:
-            output = output_
-        return output
+        return output_ + self.bias if self.bias is not None else output_
 
 
 def quantize(model, weight_bit_width):

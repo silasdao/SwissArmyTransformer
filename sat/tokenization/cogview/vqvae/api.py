@@ -23,7 +23,7 @@ def new_module(config):
             "device": device
             "params": dict of params
     '''
-    if not "target" in config:
+    if "target" not in config:
         raise KeyError("Expected key `target` to instantiate.")
     module, cls = config.get("target").rsplit(".", 1)
     model = getattr(importlib.import_module(module, package=__package__), cls)(**config.get("params", dict()))

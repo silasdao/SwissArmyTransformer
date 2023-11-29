@@ -50,12 +50,16 @@ class SwiGLUMixin(BaseMixin):
         super().__init__()
 
         # self.w1 = nn.Linear(in_features, hidden_features)
-        self.w2 = nn.ModuleList([nn.Linear(in_features, hidden_features) for i in range(num_layers)])
+        self.w2 = nn.ModuleList(
+            [nn.Linear(in_features, hidden_features) for _ in range(num_layers)]
+        )
 
         self.act = act_layer()
-        self.ffn_ln = nn.ModuleList([LayerNorm(hidden_features, eps=eps) for i in range(num_layers)])
+        self.ffn_ln = nn.ModuleList(
+            [LayerNorm(hidden_features, eps=eps) for _ in range(num_layers)]
+        )
         # self.w3 = nn.Linear(hidden_features, out_features)
-        
+
         self.drop = nn.Dropout(drop)
 
     def mlp_forward(self, hidden_states, **kw_args):

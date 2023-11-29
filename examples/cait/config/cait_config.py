@@ -5,9 +5,9 @@ import timm
 import torch
 vit = timm.create_model('cait_s24_224', pretrained=False)
 checkpoint = torch.load(os.path.join(pretrain_path, 'S24_224.pth'), map_location="cpu")['model']
-checkpoint_no_module = {}
-for k, v in checkpoint.items():
-    checkpoint_no_module[k.replace('module.', '')] = v
+checkpoint_no_module = {
+    k.replace('module.', ''): v for k, v in checkpoint.items()
+}
 vit.load_state_dict(checkpoint_no_module, strict=True)
 
 import argparse

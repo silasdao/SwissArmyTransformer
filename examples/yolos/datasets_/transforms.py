@@ -98,13 +98,13 @@ def resize(image, target, size, max_size=None):
             ow_mod = np.mod(ow, 16)
             oh_mod = np.mod(oh, 16)
             ow = ow - ow_mod
-            oh = oh - oh_mod
+            oh -= oh_mod
         else:
             oh = size
             ow = int(size * w / h)
             ow_mod = np.mod(ow, 16)
             oh_mod = np.mod(oh, 16)
-            ow = ow - ow_mod
+            ow -= ow_mod
             oh = oh - oh_mod
 
         return (oh, ow)
@@ -142,7 +142,7 @@ def resize(image, target, size, max_size=None):
     if "masks" in target:
         target['masks'] = interpolate(
             target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
-    
+
     # max_size = max(rescaled_image.size)
     # maxs = max(size)
     # padding_size = [maxs-rescaled_image.size[0], maxs-rescaled_image.size[1]]
@@ -202,9 +202,7 @@ class RandomHorizontalFlip(object):
         self.p = p
 
     def __call__(self, img, target):
-        if random.random() < self.p:
-            return hflip(img, target)
-        return img, target
+        return hflip(img, target) if random.random() < self.p else (img, target)
 
 
 class RandomResize(object):
@@ -309,7 +307,7 @@ class Compose(object):
         return image, target
 
     def __repr__(self):
-        format_string = self.__class__.__name__ + "("
+        format_string = f"{self.__class__.__name__}("
         for t in self.transforms:
             format_string += "\n"
             format_string += "    {0}".format(t)

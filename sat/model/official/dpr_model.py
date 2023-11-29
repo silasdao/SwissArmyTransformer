@@ -13,10 +13,7 @@ class DPREncoderFinalMixin(BaseMixin):
 class DPRReaderFinalMixin(BaseMixin):
     def __init__(self, hidden_size, projection_dim):
         super().__init__()
-        if projection_dim > 0:
-            embeddings_size = projection_dim
-        else:
-            embeddings_size = hidden_size
+        embeddings_size = projection_dim if projection_dim > 0 else hidden_size
         self.qa_outputs = nn.Linear(embeddings_size, 2)
         self.qa_classifier = nn.Linear(embeddings_size, 1)
 

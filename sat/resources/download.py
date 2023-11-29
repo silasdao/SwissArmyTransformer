@@ -47,21 +47,23 @@ def auto_create(name, *, path=None, url=None):
     if url == 'local':
         return model_path
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    lock = FileLock(model_path + '.lock', mode=0o777)
+    lock = FileLock(f'{model_path}.lock', mode=0o777)
     with lock:
         if url is None:
             url = MODEL_URLS[name]
         if os.path.isdir(model_path) and not url.startswith('r2://'):
             pass
-        elif os.path.isdir(model_path) and url.startswith('r2://') and url.endswith('.zip'):
-            pass
-        else:
+        elif (
+            not os.path.isdir(model_path)
+            or not url.startswith('r2://')
+            or not url.endswith('.zip')
+        ):
             print(f'Downloading models {url} into {path} ...')
             try:
                 if url.startswith('r2://'):
                     download_s3(path, url[5:])
                 else:
-                    file_path = os.path.join(path, name + '.zip')
+                    file_path = os.path.join(path, f'{name}.zip')
                     download_with_progress_bar(file_path, url)
             except Exception as e:
                 print(f'Failed to download or check, if you already had the zip file, please unzip it manually as {model_path}!')
@@ -69,7 +71,7 @@ def auto_create(name, *, path=None, url=None):
         # unzip
         if not os.path.isdir(model_path):
             import zipfile
-            file_path = os.path.join(path, name + '.zip')
+            file_path = os.path.join(path, f'{name}.zip')
             print(f'Unzipping {file_path}...')
             f = zipfile.ZipFile(file_path, 'r')
             f.extractall(path=path)

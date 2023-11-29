@@ -29,10 +29,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data = data[0].to('cuda')
     attention_mask = torch.ones((1, data.shape[-1], data.shape[-1]), device=data.device)

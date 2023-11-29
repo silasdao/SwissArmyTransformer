@@ -126,14 +126,14 @@ class ChatGLMLayerMixin(BaseMixin):
         # Third LayerNorm
         if self.layernorm_order == 'sandwich':
             attention_output = self.third_layernorm(attention_output)
-        
+
         # Residual connection.
         if self.layernorm_order == 'post':
             hidden_states = attention_input * alpha + attention_output
         else:
             hidden_states = hidden_states + attention_output
 
-        
+
         mlp_input = self.post_attention_layernorm(hidden_states)
 
         if self.is_decoder:
@@ -154,13 +154,11 @@ class ChatGLMLayerMixin(BaseMixin):
         if self.layernorm_order == 'sandwich':
             mlp_output = self.fourth_layernorm(mlp_output)
 
-        # Second residual connection.
-        if self.layernorm_order == 'post':
-            output = mlp_input * alpha + mlp_output
-        else:
-            output = hidden_states + mlp_output
-
-        return output
+        return (
+            mlp_input * alpha + mlp_output
+            if self.layernorm_order == 'post'
+            else hidden_states + mlp_output
+        )
     
 class ChatGLMModel(BaseModel):
     def __init__(self, args, transformer=None, **kwargs):
@@ -201,7 +199,7 @@ class ChatGLMModel(BaseModel):
         if position_ids is None:
             MASK, gMASK = self.mask_token_id, self.gmask_token_id
             mask_token = gMASK if gMASK in input_ids else MASK
-            use_gmask = True if gMASK in input_ids else False
+            use_gmask = gMASK in input_ids
 
             mask_positions = [seq.tolist().index(mask_token) for seq in input_ids]
             position_ids = self.get_position_ids(

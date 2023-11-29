@@ -33,7 +33,7 @@ class EncoderDecoderModel(torch.nn.Module):
         else:
             self.encoder = BaseModel(args, **kwargs)
         self.encoder.add_mixin("final", EncoderFinalMixin())
-        
+
         if decoder is not None:
             assert isinstance(decoder, BaseModel)
             self.decoder = decoder
@@ -43,7 +43,7 @@ class EncoderDecoderModel(torch.nn.Module):
             override_attrs = ['num_layers', 'hidden_size', 'num_attention_heads', 'layernorm_order'
                               'max_sequence_length', 'inner_hidden_size', 'hidden_size_per_attention_head']
             for name in override_attrs:
-                dec_attr = getattr(dec_args, 'dec_' + name, None)
+                dec_attr = getattr(dec_args, f'dec_{name}', None)
                 if dec_attr is not None:  # else use encoder-config
                     setattr(dec_args, name, dec_attr)
             self.decoder = BaseModel(args, is_decoder=True, parallel_output=parallel_output, **kwargs)

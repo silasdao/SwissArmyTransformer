@@ -42,7 +42,7 @@ class BeamSearchStrategy:
         self.end_beams = [] # list of LongTensors
         self.end_beams_penalized_scores = [] # list of LongTensors
         self.cached_beam_scores = 0 # [batch_size]
-        self.cached_beam_ngram_bans = [{} for i in range(self.num_beams)]
+        self.cached_beam_ngram_bans = [{} for _ in range(self.num_beams)]
         self.is_done = False
         self.end_beams_unchanged = 0
         self.context_length = None

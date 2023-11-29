@@ -163,17 +163,20 @@ class T5GatedGeluMLPMixin(BaseMixin):
             inner_hidden_size = 4 * hidden_size
         self.inner_hidden_size = inner_hidden_size
         self.init_method_std = init_method_std
-        self.gated_h_to_4h_list = torch.nn.ModuleList([
-            ColumnParallelLinear(
-                self.hidden_size,
-                self.inner_hidden_size,
-                gather_output=False,
-                init_method=self._init_weights,
-                bias=bias,
-                module=self,
-                name="gated_h_to_4h"
-            )
-            for layer_id in range(num_layers)])
+        self.gated_h_to_4h_list = torch.nn.ModuleList(
+            [
+                ColumnParallelLinear(
+                    self.hidden_size,
+                    self.inner_hidden_size,
+                    gather_output=False,
+                    init_method=self._init_weights,
+                    bias=bias,
+                    module=self,
+                    name="gated_h_to_4h",
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
     def _init_weights(self, weight, **kwargs):
         torch.nn.init.normal_(weight, mean=0, std=self.init_method_std * (self.hidden_size ** -0.5))

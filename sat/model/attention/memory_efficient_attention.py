@@ -12,16 +12,8 @@ class MemoryEfficientAttentionMixin(BaseMixin):
     
     def attention_fn(self, query_layer, key_layer, value_layer, attention_mask,
                        attention_dropout=None, log_attention_weights=None, scaling_attention_score=True, **kwargs):
-        if not scaling_attention_score:
-            scale = 1.
-        else:
-            scale = None
-        
-        if attention_dropout is not None:
-            attention_dropout = attention_dropout.p     
-        else:
-            attention_dropout = 0.0    
-
+        scale = 1. if not scaling_attention_score else None
+        attention_dropout = 0.0 if attention_dropout is None else attention_dropout.p
         return memory_efficient_attention(query_layer.transpose(1, 2), key_layer.transpose(1, 2), value_layer.transpose(1, 2), mask=attention_mask, scale=scale, attention_dropout=attention_dropout).transpose(1, 2)
     
 class TransposedMemoryEfficientAttentionMixin(BaseMixin):
@@ -33,16 +25,8 @@ class TransposedMemoryEfficientAttentionMixin(BaseMixin):
     
     def attention_fn(self, query_layer, key_layer, value_layer, attention_mask,
                        attention_dropout=None, log_attention_weights=None, scaling_attention_score=True, **kwargs):
-        if not scaling_attention_score:
-            scale = 1.
-        else:
-            scale = None
-        
-        if attention_dropout is not None:
-            attention_dropout = attention_dropout.p     
-        else:
-            attention_dropout = 0.0
-
+        scale = 1. if not scaling_attention_score else None
+        attention_dropout = 0.0 if attention_dropout is None else attention_dropout.p
         return memory_efficient_attention(query_layer, key_layer, value_layer, mask=attention_mask, scale=scale, attention_dropout=attention_dropout)
     
     def attention_forward(self, hidden_states, mask, **kw_args):

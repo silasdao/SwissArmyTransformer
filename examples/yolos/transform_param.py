@@ -1,6 +1,7 @@
 """
 Given a config file, transform a pretrained ViTModel.
 """
+
 import os
 from config.yolos_tiny_config import yolos, args
 
@@ -8,7 +9,7 @@ import torch
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', '127.0.0.1')
 master_port = os.getenv('MASTER_PORT', '16666')
-init_method += master_ip + ':' + master_port
+init_method += f'{master_ip}:{master_port}'
 torch.distributed.init_process_group(
         backend='nccl',
         world_size=args.world_size, rank=args.rank, init_method=init_method)
@@ -37,14 +38,14 @@ def copy_from_param(src, dst):
     dst.data = src.data
 
 def copy_layer_norm(src, dst):
-    src_ln = []
-    for k, v in src.named_parameters():
-        if 'norm' in k.lower() and type(v) is not torch.nn.Identity():
-            src_ln.append((k, v))
-    dst_ln = []
-    for k, v in dst.named_parameters():
-        if 'layernorm' in k.lower():
-            dst_ln.append((k, v))
+    src_ln = [
+        (k, v)
+        for k, v in src.named_parameters()
+        if 'norm' in k.lower() and type(v) is not torch.nn.Identity()
+    ]
+    dst_ln = [
+        (k, v) for k, v in dst.named_parameters() if 'layernorm' in k.lower()
+    ]
     assert len(src_ln) == len(dst_ln)
     for kvs, kvd in zip(src_ln, dst_ln):
         assert kvd[1].data.shape == kvs[1].data.shape
@@ -85,9 +86,19 @@ with torch.no_grad():
     num_patches = (height//16) * (width//16)
     seq_len = 1 + num_patches + model.get_mixin('det_head').num_det_tokens
     position_ids = torch.cat([torch.arange(seq_len)[None,]]*batch_size)
-    encoded_input = {'input_ids':torch.cat([torch.arange(1+model.get_mixin('det_head').num_det_tokens)[None,]]*batch_size).long(), 'image':images, 'position_ids':position_ids}
-    encoded_input['attention_mask'] = None
-
+    encoded_input = {
+        'input_ids': torch.cat(
+            [
+                torch.arange(1 + model.get_mixin('det_head').num_det_tokens)[
+                    None,
+                ]
+            ]
+            * batch_size
+        ).long(),
+        'image': images,
+        'position_ids': position_ids,
+        'attention_mask': None,
+    }
     dst_output = model(**encoded_input, offline=True) # offline=False, height=height//16, width=width//16)[0]
 
     torch.save({'module':model.state_dict()}, "output.pt")

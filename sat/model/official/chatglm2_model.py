@@ -62,18 +62,23 @@ class ChatGLM2AttnMixin(BaseMixin):
 class SwiGLUMixin(BaseMixin):
     def __init__(self, num_layers, in_features, hidden_features, bias=False):
         super().__init__()
-        self.w2 = nn.ModuleList([ColumnParallelLinear(
-            in_features,
-            hidden_features,
-            gather_output=False,
-            # init_method=init_method,
-            bias=bias,
-            # params_dtype=params_dtype,
-            module=self,
-            name="dense_h_to_4h_gate",
-            # skip_init=skip_init,
-            # device=device
-        ) for i in range(num_layers)])
+        self.w2 = nn.ModuleList(
+            [
+                ColumnParallelLinear(
+                    in_features,
+                    hidden_features,
+                    gather_output=False,
+                    # init_method=init_method,
+                    bias=bias,
+                    # params_dtype=params_dtype,
+                    module=self,
+                    name="dense_h_to_4h_gate",
+                    # skip_init=skip_init,
+                    # device=device
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
     def mlp_forward(self, hidden_states, **kw_args):
         x = hidden_states
@@ -101,9 +106,7 @@ class ChatGLM2Model(BaseModel):
         batch_size, seq_length = input_ids.shape
         full_attention_mask = torch.ones(batch_size, seq_length, seq_length, dtype=next(self.parameters()).dtype, device=input_ids.device)
         full_attention_mask.tril_()
-        past_length = 0
-        if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
+        past_length = past_key_values[0][0].shape[2] if past_key_values else 0
         if past_length:
             full_attention_mask = torch.cat((torch.ones(batch_size, seq_length, past_length, dtype=next(self.parameters()).dtype,
                                                         device=input_ids.device), full_attention_mask), dim=-1)
@@ -117,8 +120,11 @@ class ChatGLM2Model(BaseModel):
     
     def get_position_ids(self, input_ids):
         batch_size, seq_length = input_ids.shape
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device).unsqueeze(0).repeat(batch_size, 1)
-        return position_ids
+        return (
+            torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+            .unsqueeze(0)
+            .repeat(batch_size, 1)
+        )
     
     def forward(self, input_ids, position_ids=None, attention_mask=None, past_key_values=None, **kwargs):
         if position_ids is None:

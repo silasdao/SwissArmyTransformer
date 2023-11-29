@@ -40,7 +40,9 @@ def installed_cuda_version(name=""):
     cuda_home = torch.utils.cpp_extension.CUDA_HOME
     assert cuda_home is not None, "CUDA_HOME does not exist, unable to compile CUDA op(s)"
     # Ensure there is not a cuda version mismatch between torch and nvcc compiler
-    output = subprocess.check_output([cuda_home + "/bin/nvcc", "-V"], universal_newlines=True)
+    output = subprocess.check_output(
+        [f"{cuda_home}/bin/nvcc", "-V"], universal_newlines=True
+    )
     output_split = output.split()
     release_idx = output_split.index("release")
     release = output_split[release_idx + 1].replace(',', '').split(".")
@@ -289,10 +291,7 @@ class OpBuilder(ABC):
             # Compile and link succeeded
             return True
 
-        except CompileError:
-            return False
-
-        except LinkError:
+        except (CompileError, LinkError):
             return False
 
         except:
@@ -357,9 +356,7 @@ class OpBuilder(ABC):
         result = subprocess.check_output('lscpu', shell=True)
         result = result.decode('utf-8').strip().lower()
 
-        cpu_info = {}
-        cpu_info['arch'] = None
-        cpu_info['flags'] = ""
+        cpu_info = {'arch': None, 'flags': ""}
         if 'genuineintel' in result or 'authenticamd' in result:
             cpu_info['arch'] = 'X86_64'
             if 'avx512' in result:
@@ -398,19 +395,17 @@ class OpBuilder(ABC):
         return '-D__SCALAR__'
 
     def command_exists(self, cmd):
-        if '|' in cmd:
-            cmds = cmd.split("|")
-        else:
-            cmds = [cmd]
+        cmds = cmd.split("|") if '|' in cmd else [cmd]
         valid = False
         for cmd in cmds:
             result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
             valid = valid or result.wait() == 0
 
-        if not valid and len(cmds) > 1:
-            print(f"{WARNING} {self.name} requires one of the following commands '{cmds}', but it does not exist!")
-        elif not valid and len(cmds) == 1:
-            print(f"{WARNING} {self.name} requires the '{cmd}' command, but it does not exist!")
+        if not valid:
+            if len(cmds) > 1:
+                print(f"{WARNING} {self.name} requires one of the following commands '{cmds}', but it does not exist!")
+            elif len(cmds) == 1:
+                print(f"{WARNING} {self.name} requires the '{cmd}' command, but it does not exist!")
         return valid
 
     def warning(self, msg):
@@ -433,16 +428,15 @@ class OpBuilder(ABC):
 
     def load(self, verbose=True):
         from deepspeed.git_version_info import installed_ops, torch_info
-        if installed_ops[self.name]:
-            # Ensure the op we're about to load was compiled with the same
-            # torch/cuda versions we are currently using at runtime.
-            self.validate_torch_version(torch_info)
-            if torch.cuda.is_available() and isinstance(self, CUDAOpBuilder):
-                self.validate_torch_op_version(torch_info)
-
-            return importlib.import_module(self.absolute_name())
-        else:
+        if not installed_ops[self.name]:
             return self.jit_load(verbose)
+        # Ensure the op we're about to load was compiled with the same
+        # torch/cuda versions we are currently using at runtime.
+        self.validate_torch_version(torch_info)
+        if torch.cuda.is_available() and isinstance(self, CUDAOpBuilder):
+            self.validate_torch_op_version(torch_info)
+
+        return importlib.import_module(self.absolute_name())
 
     def jit_load(self, verbose=True):
         if not self.is_compatible(verbose):
@@ -536,9 +530,8 @@ class CUDAOpBuilder(OpBuilder):
                         f"{WARNING} env var `TORCH_CUDA_ARCH_LIST={cross_compile_archs_env}` overrides `cross_compile_archs={cross_compile_archs}`"
                     )
                 cross_compile_archs = cross_compile_archs_env.replace(' ', ';')
-            else:
-                if cross_compile_archs is None:
-                    cross_compile_archs = get_default_compute_capabilities()
+            elif cross_compile_archs is None:
+                cross_compile_archs = get_default_compute_capabilities()
             ccs = cross_compile_archs.split(';')
 
         ccs = self.filter_ccs(ccs)
@@ -591,8 +584,8 @@ class CUDAOpBuilder(OpBuilder):
             from torch.utils.cpp_extension import CUDAExtension as ExtensionBuilder
 
         compile_args = {'cxx': self.strip_empty_entries(self.cxx_args())} if self.build_for_cpu else \
-                       {'cxx': self.strip_empty_entries(self.cxx_args()), \
-                           'nvcc': self.strip_empty_entries(self.nvcc_args())}
+                           {'cxx': self.strip_empty_entries(self.cxx_args()), \
+                               'nvcc': self.strip_empty_entries(self.nvcc_args())}
 
         cuda_ext = ExtensionBuilder(name=self.absolute_name(),
                                     sources=self.strip_empty_entries(self.sources()),
@@ -606,10 +599,7 @@ class CUDAOpBuilder(OpBuilder):
             curr_file = Path(__file__).parent.parent  # ds root
             for i in range(len(sources)):
                 src = Path(sources[i])
-                if src.is_absolute():
-                    sources[i] = str(src.relative_to(curr_file))
-                else:
-                    sources[i] = str(src)
+                sources[i] = str(src.relative_to(curr_file)) if src.is_absolute() else str(src)
             cuda_ext.sources = sources
         return cuda_ext
 
@@ -640,10 +630,12 @@ class CUDAOpBuilder(OpBuilder):
         if self.is_rocm_pytorch():
             ROCM_MAJOR, ROCM_MINOR = self.installed_rocm_version()
             args += [
-                '-std=c++14', '-U__HIP_NO_HALF_OPERATORS__', '-U__HIP_NO_HALF_CONVERSIONS__',
+                '-std=c++14',
+                '-U__HIP_NO_HALF_OPERATORS__',
+                '-U__HIP_NO_HALF_CONVERSIONS__',
                 '-U__HIP_NO_HALF2_OPERATORS__',
-                '-DROCM_VERSION_MAJOR=%s' % ROCM_MAJOR,
-                '-DROCM_VERSION_MINOR=%s' % ROCM_MINOR
+                f'-DROCM_VERSION_MAJOR={ROCM_MAJOR}',
+                f'-DROCM_VERSION_MINOR={ROCM_MINOR}',
             ]
         else:
             cuda_major, _ = installed_cuda_version()
@@ -661,10 +653,7 @@ class CUDAOpBuilder(OpBuilder):
         if self.build_for_cpu:
             return []
 
-        if sys.platform == "win32":
-            return ['cublas', 'curand']
-        else:
-            return []
+        return ['cublas', 'curand'] if sys.platform == "win32" else []
 
 
 class TorchCPUOpBuilder(CUDAOpBuilder):
@@ -673,10 +662,7 @@ class TorchCPUOpBuilder(CUDAOpBuilder):
         if self.build_for_cpu:
             return ['-fopenmp']
 
-        if not self.is_rocm_pytorch():
-            return ['-lcurand']
-
-        return []
+        return ['-lcurand'] if not self.is_rocm_pytorch() else []
 
     def cxx_args(self):
         import torch

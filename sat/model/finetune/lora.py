@@ -43,20 +43,23 @@ class LoRAMixin(BaseMixin):
             self.lora_dropout = lambda x: x
 
         if layer_range is None:
-            layer_range = [i for i in range(layer_num)]
+            layer_range = list(range(layer_num))
         self.layer_range = layer_range
-        self.lora_linear = nn.ModuleList([
-            nn.ParameterDict()
-            for layer_id in range(layer_num)
-        ])
+        self.lora_linear = nn.ModuleList(
+            [nn.ParameterDict() for _ in range(layer_num)]
+        )
         matrices = ["Q", "K", "V", "O"]
 
         for i in layer_range:
             for matrix in matrices:
-                self.lora_linear[i][matrix+"_A"] = nn.Parameter(torch.zeros((r, hidden_size)))
-                self.lora_linear[i][matrix+"_B"] = nn.Parameter(torch.zeros((hidden_size, r)))
-                nn.init.kaiming_uniform_(self.lora_linear[i][matrix+"_A"], a=math.sqrt(5))
-                nn.init.zeros_(self.lora_linear[i][matrix+"_B"])
+                self.lora_linear[i][f"{matrix}_A"] = nn.Parameter(
+                    torch.zeros((r, hidden_size))
+                )
+                self.lora_linear[i][f"{matrix}_B"] = nn.Parameter(
+                    torch.zeros((hidden_size, r))
+                )
+                nn.init.kaiming_uniform_(self.lora_linear[i][f"{matrix}_A"], a=math.sqrt(5))
+                nn.init.zeros_(self.lora_linear[i][f"{matrix}_B"])
 
 
         self.scaling = self.lora_alpha / self.r

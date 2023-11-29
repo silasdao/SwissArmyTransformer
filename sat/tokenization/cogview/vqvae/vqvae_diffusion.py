@@ -129,11 +129,7 @@ class ResnetBlock(nn.Module):
         h = self.conv2(h)
 
         if self.in_channels != self.out_channels:
-            if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
-            else:
-                x = self.nin_shortcut(x)
-
+            x = self.conv_shortcut(x) if self.use_conv_shortcut else self.nin_shortcut(x)
         return x+h
 
 
@@ -230,7 +226,7 @@ class Model(nn.Module):
             attn = nn.ModuleList()
             block_in = ch*in_ch_mult[i_level]
             block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
@@ -366,7 +362,7 @@ class Encoder(nn.Module):
             attn = nn.ModuleList()
             block_in = ch*in_ch_mult[i_level]
             block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
@@ -457,8 +453,9 @@ class Decoder(nn.Module):
         block_in = ch*ch_mult[self.num_resolutions-1]
         curr_res = resolution // 2**(self.num_resolutions-1)
         self.z_shape = (1,z_channels,curr_res,curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(
-            self.z_shape, np.prod(self.z_shape)))
+        print(
+            f"Working with z of shape {self.z_shape} = {np.prod(self.z_shape)} dimensions."
+        )
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(z_channels,
@@ -485,7 +482,7 @@ class Decoder(nn.Module):
             block = nn.ModuleList()
             attn = nn.ModuleList()
             block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks+1):
+            for _ in range(self.num_res_blocks+1):
                 block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
@@ -581,7 +578,7 @@ class VUNet(nn.Module):
             attn = nn.ModuleList()
             block_in = ch*in_ch_mult[i_level]
             block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,
@@ -722,11 +719,7 @@ class SimpleDecoder(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.model):
-            if i in [1,2,3]:
-                x = layer(x, None)
-            else:
-                x = layer(x)
-
+            x = layer(x, None) if i in [1,2,3] else layer(x)
         h = self.norm_out(x)
         h = nonlinearity(h)
         x = self.conv_out(h)
@@ -748,7 +741,7 @@ class UpsampleDecoder(nn.Module):
         for i_level in range(self.num_resolutions):
             res_block = []
             block_out = ch * ch_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
+            for _ in range(self.num_res_blocks + 1):
                 res_block.append(ResnetBlock(in_channels=block_in,
                                          out_channels=block_out,
                                          temb_channels=self.temb_ch,

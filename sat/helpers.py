@@ -30,7 +30,7 @@ def print_parser(parser, help_width=32):
 
         argument_list.append((arg_name, arg_help, arg_type, arg_default))
 
-    max_name_len = max([len(arg[0]) for arg in argument_list])
+    max_name_len = max(len(arg[0]) for arg in argument_list)
 
     print("-" * (max_name_len + 56))
     print(f"{'Argument'.ljust(max_name_len)}  Help" + " "*(help_width-4) + f"{'Type'.ljust(8)}    Default")
@@ -83,21 +83,18 @@ def print_aligned_string_list(str_list, column_spacing=2):
 
 def list_avail_models():
     from .model import official
-    model_list = []
-    for name in dir(official):
-        # if is a class
-        if isinstance(getattr(official, name), type):
-            model_list.append(name)
+    model_list = [
+        name
+        for name in dir(official)
+        if isinstance(getattr(official, name), type)
+    ]
     print('Available model definitions (example: "from sat import GLMModel"):')
     print_aligned_string_list(model_list)
     return model_list
 
 def list_avail_pretrained():
     from sat.resources.urls import MODEL_URLS
-    # iterate over all pretrained models into a list
-    model_list = []
-    for model_name, model_url in MODEL_URLS.items():
-        model_list.append(model_name)
+    model_list = [model_name for model_name, model_url in MODEL_URLS.items()]
     print('Available pretrained models (example: sat.AutoModel.from_pretrained("roberta-base")):')
     print_aligned_string_list(model_list)
     return model_list

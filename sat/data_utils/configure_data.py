@@ -74,7 +74,7 @@ def make_data_loader(dataset, batch_size, args, split, collate_fn=None):
             last_shape.append(last_len % batch_per_worker) # one process get the rest (<1 batch)
         drop_number = world_size - ((last_len-1)//batch_per_worker + 1)
         # other processes get nothing, but append 1 for running. will drop later according to drop_number.
-        for j in range(drop_number): 
+        for _ in range(drop_number):
             last_shape.append(1)
     else:
         drop_number = 0
@@ -84,20 +84,20 @@ def make_data_loader(dataset, batch_size, args, split, collate_fn=None):
     elif split=='test':
         args.test_last_shape = last_shape
         args.test_drop_number = drop_number
-    data_loader = torch.utils.data.DataLoader(dataset,
-                                              batch_sampler=batch_sampler,
-                                              num_workers=args.num_workers,
-                                              pin_memory=True,
-                                              collate_fn=collate_fn,
-                                              prefetch_factor=args.prefetch_factor if args.num_workers > 0 else None,
-                                              )
-    return data_loader
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_sampler=batch_sampler,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        collate_fn=collate_fn,
+        prefetch_factor=args.prefetch_factor if args.num_workers > 0 else None,
+    )
 
 
 def make_dataset_full(path, split, args, create_dataset_function, 
         dataset_weights=None, random_mapping=True, is_train_data=False, **kwargs):
     """function to create datasets+tokenizers for common options"""
-    print_all('make dataset ' + str(path), level='DEBUG')
+    print_all(f'make dataset {str(path)}', level='DEBUG')
     assert isinstance(path, list)
 
     if args.iterable_dataset: # cannot indexed
@@ -105,7 +105,7 @@ def make_dataset_full(path, split, args, create_dataset_function,
         # For instance, someone just gives you a iterable dataset, e.g. webdataset
         from .webds import ConfiguredResampledShards, DataPipeline
         valid_types = (ConfiguredResampledShards, DataPipeline)
-        
+
         assert split[0] == 1, 'Iterable dataset cannot auto split.'
         ds = []
         for p in path:
@@ -117,7 +117,7 @@ def make_dataset_full(path, split, args, create_dataset_function,
         return ds
 
     if split is None:
-        split = [1.] 
+        split = [1.]
     if not should_split(split):
         ds = []
         for p in path:
@@ -320,10 +320,7 @@ class ConcatDataset(data.Dataset):
         super(ConcatDataset, self).__init__()
         assert len(datasets) > 0, 'datasets should not be an empty iterable'
         self.datasets = list(datasets)
-        if weights is None:
-            self.weights = [1] * len(self.datasets)
-        else:
-            self.weights = weights
+        self.weights = [1] * len(self.datasets) if weights is None else weights
         self.cumulative_sizes = self.cumsum(self.datasets, self.weights)
 
     def __len__(self):
@@ -425,7 +422,7 @@ class AlterDataset(IterableDataset):
             except StopIteration:
                 del iterators[index]
                 del self.weights[index]
-                if len(iterators) == 0:
+                if not iterators:
                     break
                 s = sum(self.weights)
                 self.weights = [w / s for w in self.weights]

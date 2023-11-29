@@ -287,9 +287,9 @@ def _adjust_vocab_size(args):
     while (after % multiple) != 0:
         after += 1
     if args.rank == 0:
-        print_rank0('> padded vocab (size: {}) with {} dummy '
-                 'tokens (new size: {})'.format(
-        before, after - before, after))
+        print_rank0(
+            f'> padded vocab (size: {before}) with {after - before} dummy tokens (new size: {after})'
+        )
 
 def _simple_init(model_parallel_size=1):
     '''Necessary initialization for torch.distributed for model-only mode'''
@@ -346,15 +346,16 @@ def get_args(args_list=None, parser=None):
     args.world_size = int(os.getenv("WORLD_SIZE", '1'))
     if args.local_rank is None:
         args.local_rank = int(os.getenv("LOCAL_RANK", '0')) # torchrun
-   
-    if args.device == -1: # not set manually
-        if torch.cuda.device_count() == 0:
+
+    if torch.cuda.device_count() == 0:
+        if args.device == -1:
             args.device = 'cpu'
-        elif args.local_rank is not None:
+    elif args.local_rank is not None:
+        if args.device == -1:
             args.device = args.local_rank
-        else:
-            args.device = args.rank % torch.cuda.device_count()
-            
+    elif args.device == -1:
+        args.device = args.rank % torch.cuda.device_count()
+
     # local rank should be consistent with device in DeepSpeed
     if args.local_rank != args.device and args.mode != 'inference':
         raise ValueError(
@@ -365,14 +366,15 @@ def get_args(args_list=None, parser=None):
 
     # args.model_parallel_size = min(args.model_parallel_size, args.world_size)
     if args.rank == 0:
-        print_rank0('using world size: {} and model-parallel size: {} '.format(
-            args.world_size, args.model_parallel_size))
+        print_rank0(
+            f'using world size: {args.world_size} and model-parallel size: {args.model_parallel_size} '
+        )
     if args.vocab_size > 0:
         _adjust_vocab_size(args)
-    
+
     if args.train_data_weights is not None:
         assert len(args.train_data_weights) == len(args.train_data)
-    
+
     if args.mode != 'inference': # training with deepspeed
         args.deepspeed = True
         if args.deepspeed_config is None: # not specified
@@ -381,7 +383,7 @@ def get_args(args_list=None, parser=None):
         else:
             override_deepspeed_config = False
 
-    assert not (args.fp16 and args.bf16), 'cannot specify both fp16 and bf16.'
+    assert not args.fp16 or not args.bf16, 'cannot specify both fp16 and bf16.'
 
     if args.zero_stage > 0 and not args.fp16 and not args.bf16:
         print_rank0('Automatically set fp16=True to use ZeRO.')     
@@ -389,14 +391,11 @@ def get_args(args_list=None, parser=None):
         args.bf16 = False
 
     if args.deepspeed:
-        if args.checkpoint_activations:
-            args.deepspeed_activation_checkpointing = True
-        else:
-            args.deepspeed_activation_checkpointing = False
+        args.deepspeed_activation_checkpointing = bool(args.checkpoint_activations)
         if args.deepspeed_config is not None:
             with open(args.deepspeed_config) as file:
                 deepspeed_config = json.load(file)
-            
+
         if override_deepspeed_config: # not specify deepspeed_config, use args
             if args.fp16:
                 deepspeed_config["fp16"]["enabled"] = True
@@ -413,14 +412,14 @@ def get_args(args_list=None, parser=None):
         else: # override args with values in deepspeed_config
             if args.rank == 0:
                 print_rank0('Will override arguments with manually specified deepspeed_config!')
-            if "fp16" in deepspeed_config and deepspeed_config["fp16"]["enabled"]:
-                args.fp16 = True
-            else:
-                args.fp16 = False
-            if "bf16" in deepspeed_config and deepspeed_config["bf16"]["enabled"]:
-                args.bf16 = True
-            else:
-                args.bf16 = False
+            args.fp16 = bool(
+                "fp16" in deepspeed_config
+                and deepspeed_config["fp16"]["enabled"]
+            )
+            args.bf16 = bool(
+                "bf16" in deepspeed_config
+                and deepspeed_config["bf16"]["enabled"]
+            )
             if "train_micro_batch_size_per_gpu" in deepspeed_config:
                 args.batch_size = deepspeed_config["train_micro_batch_size_per_gpu"]
             if "gradient_accumulation_steps" in deepspeed_config:
@@ -432,10 +431,10 @@ def get_args(args_list=None, parser=None):
                 args.lr = optimizer_params_config.get("lr", args.lr)
                 args.weight_decay = optimizer_params_config.get("weight_decay", args.weight_decay)
         args.deepspeed_config = deepspeed_config
-    
+
     # if args.sandwich_ln: # removed in v0.3
     #     args.layernorm_order = 'sandwich'
-    
+
     # initialize distributed and random seed because it always seems to be necessary.
     initialize_distributed(args)
     set_random_seed(args.seed)
@@ -493,21 +492,19 @@ def initialize_distributed(args):
             mpu.initialize_model_parallel(args.model_parallel_size)
         return True
     # the automatic assignment of devices has been moved to arguments.py
-    if args.device == 'cpu':
-        pass
-    else:
+    if args.device != 'cpu':
         torch.cuda.set_device(args.device)
     # Call the init process
     init_method = 'tcp://'
     args.master_ip = os.getenv('MASTER_ADDR', 'localhost')
-    
+
     if args.world_size == 1:
         from sat.helpers import get_free_port
         default_master_port = str(get_free_port())
     else:
         default_master_port = '6000'
     args.master_port = os.getenv('MASTER_PORT', default_master_port)
-    init_method += args.master_ip + ':' + args.master_port
+    init_method += f'{args.master_ip}:{args.master_port}'
     torch.distributed.init_process_group(
         backend=args.distributed_backend,
         world_size=args.world_size, rank=args.rank,
@@ -538,20 +535,21 @@ def initialize_distributed(args):
 
 def set_random_seed(seed):
     """Set random seed for reproducability."""
-    if seed is not None:
-        assert seed > 0
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.enabled = True # False
-        torch.backends.cuda.matmul.allow_tf32 = False # if set it to True will be much faster but not accurate
-        try:
-            import deepspeed
-            if deepspeed.checkpointing.is_configured():
-                mpu.model_parallel_cuda_manual_seed(seed)
-        except ImportError:
-            pass
+    if seed is None:
+        return
+    assert seed > 0
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.enabled = True # False
+    torch.backends.cuda.matmul.allow_tf32 = False # if set it to True will be much faster but not accurate
+    try:
+        import deepspeed
+        if deepspeed.checkpointing.is_configured():
+            mpu.model_parallel_cuda_manual_seed(seed)
+    except ImportError:
+        pass

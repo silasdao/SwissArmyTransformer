@@ -161,11 +161,11 @@ class BaseModel(torch.nn.Module, metaclass=MetaModel):
                             old_impl = partial(HOOKS_DEFAULT[name], self) # relax! `partial` does not affect the signature
                         old_origin = hook_origins.get(name, 'default')
                         hooks[name] = partial(getattr(m, name), old_impl=old_impl)
-                        hook_origins[name] = mixin_name + ' -> ' + old_origin
+                        hook_origins[name] = f'{mixin_name} -> {old_origin}'
                     elif name in hooks and not hasattr(hooks[name], 'replacable'): # if this hook name is already registered
                         raise ValueError(f'Hook {name} conflicts at {mixin_name} and {hook_origins[name]}.')
                     else: # new hook
-                        if name in hooks and hasattr(hooks[name], 'replacable'):
+                        if name in hooks:
                             warnings.warn(f'Hook {name} at {mixin_name} replaces {hook_origins[name]}.')
                         hooks[name] = getattr(m, name)
                         hook_origins[name] = mixin_name
@@ -213,55 +213,54 @@ class BaseModel(torch.nn.Module, metaclass=MetaModel):
     def from_pretrained(cls, name, args=None, *, home_path=None, url=None, prefix='', build_only=False, overwrite_args={}, **kwargs):
         if build_only or 'model_parallel_size' not in overwrite_args:
             return cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=build_only, overwrite_args=overwrite_args, **kwargs)
-        else:
-            new_model_parallel_size = overwrite_args['model_parallel_size']
-            if new_model_parallel_size != 1 or new_model_parallel_size == 1 and args.model_parallel_size == 1:
-                model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
-                local_rank = get_node_rank()
-                world_size = torch.distributed.get_world_size()
-                assert world_size % new_model_parallel_size == 0, "world size should be a multiplier of new model_parallel_size."
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-                if local_rank == 0:
-                    args.use_gpu_initialization = False
-                    args.device = 'cpu'
-                    overwrite_args.pop('model_parallel_size')
-                    model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
-                    if args_.model_parallel_size != 1:
-                        raise Exception("We do not support overwriting model_parallel_size when original model_parallel_size != 1. Try merging the model using `from_pretrained(xxx,overwrite_args={'model_parallel_size':1})` first if you still want to change model_parallel_size!")
-                torch.distributed.barrier()
-                destroy_model_parallel()
-                initialize_model_parallel(new_model_parallel_size)
-                if local_rank == 0:
-                    mp_split_model_rank0(model, model_full)
-                    del model_full
-                else:
-                    mp_split_model_receive(model)
-            else:
+        new_model_parallel_size = overwrite_args['model_parallel_size']
+        if new_model_parallel_size != 1 or args.model_parallel_size == 1:
+            model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
+            local_rank = get_node_rank()
+            world_size = torch.distributed.get_world_size()
+            assert world_size % new_model_parallel_size == 0, "world size should be a multiplier of new model_parallel_size."
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+            if local_rank == 0:
+                args.use_gpu_initialization = False
+                args.device = 'cpu'
                 overwrite_args.pop('model_parallel_size')
-                model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
-                rank = torch.distributed.get_rank()
-                world_size = torch.distributed.get_world_size()
-                assert world_size == model_args.model_parallel_size, "world size should be equal to model_parallel_size."
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-                if rank == 0:
-                    args.use_gpu_initialization = False
-                    args.device = 'cpu'
-                    overwrite_args['model_parallel_size'] = 1
-                    model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
-                torch.distributed.barrier()
-                destroy_model_parallel()
-                initialize_model_parallel(model_args.model_parallel_size)
-                if rank == 0:
-                    mp_merge_model_rank0(model, model_full)
-                    model, model_args = model_full, args_
-                else:
-                    mp_merge_model_send(model)
-                    model_args.model_parallel_size = 1
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-            return model, model_args
+                model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
+                if args_.model_parallel_size != 1:
+                    raise Exception("We do not support overwriting model_parallel_size when original model_parallel_size != 1. Try merging the model using `from_pretrained(xxx,overwrite_args={'model_parallel_size':1})` first if you still want to change model_parallel_size!")
+            torch.distributed.barrier()
+            destroy_model_parallel()
+            initialize_model_parallel(new_model_parallel_size)
+            if local_rank == 0:
+                mp_split_model_rank0(model, model_full)
+                del model_full
+            else:
+                mp_split_model_receive(model)
+        else:
+            overwrite_args.pop('model_parallel_size')
+            model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
+            rank = torch.distributed.get_rank()
+            world_size = torch.distributed.get_world_size()
+            assert world_size == model_args.model_parallel_size, "world size should be equal to model_parallel_size."
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+            if rank == 0:
+                args.use_gpu_initialization = False
+                args.device = 'cpu'
+                overwrite_args['model_parallel_size'] = 1
+                model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
+            torch.distributed.barrier()
+            destroy_model_parallel()
+            initialize_model_parallel(model_args.model_parallel_size)
+            if rank == 0:
+                mp_merge_model_rank0(model, model_full)
+                model, model_args = model_full, args_
+            else:
+                mp_merge_model_send(model)
+                model_args.model_parallel_size = 1
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+        return model, model_args
     
     @classmethod
     def list_avail_args(cls, print=True):
@@ -289,11 +288,9 @@ class BaseModel(torch.nn.Module, metaclass=MetaModel):
         # use parser to parse kwargs
         args = parser.parse_args([])
         for k, v in kwargs.items():
-            if hasattr(args, k) or k in ['fp16']: # non-arch args but affect building models
-                setattr(args, k, v)
-            else:
+            if not hasattr(args, k) and k not in ['fp16']:
                 print_rank0(f'warning: Unknown arg {k} for class {cls.__name__}.', level='DEBUG')
-                setattr(args, k, v)
+            setattr(args, k, v)
         return args
 
 class AutoModel():
@@ -335,55 +332,54 @@ class AutoModel():
     def from_pretrained(cls, name, args=None, *, home_path=None, url=None, prefix='', build_only=False, overwrite_args={}, **kwargs):
         if build_only or 'model_parallel_size' not in overwrite_args:
             return cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=build_only, overwrite_args=overwrite_args, **kwargs)
-        else:
-            new_model_parallel_size = overwrite_args['model_parallel_size']
-            if new_model_parallel_size != 1 or new_model_parallel_size == 1 and args.model_parallel_size == 1:
-                model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
-                local_rank = get_node_rank()
-                world_size = torch.distributed.get_world_size()
-                assert world_size % new_model_parallel_size == 0, "world size should be a multiplier of new model_parallel_size."
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-                if local_rank == 0:
-                    args.use_gpu_initialization = False
-                    args.device = 'cpu'
-                    overwrite_args.pop('model_parallel_size')
-                    model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
-                    if args_.model_parallel_size != 1:
-                        raise Exception("We do not support overwriting model_parallel_size when original model_parallel_size != 1. Try merging the model using `from_pretrained(xxx,overwrite_args={'model_parallel_size':1})` first if you still want to change model_parallel_size!")
-                torch.distributed.barrier()
-                destroy_model_parallel()
-                initialize_model_parallel(new_model_parallel_size)
-                if local_rank == 0:
-                    mp_split_model_rank0(model, model_full)
-                    del model_full
-                else:
-                    mp_split_model_receive(model)
-            else:
+        new_model_parallel_size = overwrite_args['model_parallel_size']
+        if new_model_parallel_size != 1 or args.model_parallel_size == 1:
+            model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
+            local_rank = get_node_rank()
+            world_size = torch.distributed.get_world_size()
+            assert world_size % new_model_parallel_size == 0, "world size should be a multiplier of new model_parallel_size."
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+            if local_rank == 0:
+                args.use_gpu_initialization = False
+                args.device = 'cpu'
                 overwrite_args.pop('model_parallel_size')
-                model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
-                rank = torch.distributed.get_rank()
-                world_size = torch.distributed.get_world_size()
-                assert world_size == model_args.model_parallel_size, "world size should be equal to model_parallel_size."
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-                if rank == 0:
-                    args.use_gpu_initialization = False
-                    args.device = 'cpu'
-                    overwrite_args['model_parallel_size'] = 1
-                    model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
-                torch.distributed.barrier()
-                destroy_model_parallel()
-                initialize_model_parallel(model_args.model_parallel_size)
-                if rank == 0:
-                    mp_merge_model_rank0(model, model_full)
-                    model, model_args = model_full, args_
-                else:
-                    mp_merge_model_send(model)
-                    model_args.model_parallel_size = 1
-                destroy_model_parallel()
-                initialize_model_parallel(1)
-            return model, model_args
+                model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
+                if args_.model_parallel_size != 1:
+                    raise Exception("We do not support overwriting model_parallel_size when original model_parallel_size != 1. Try merging the model using `from_pretrained(xxx,overwrite_args={'model_parallel_size':1})` first if you still want to change model_parallel_size!")
+            torch.distributed.barrier()
+            destroy_model_parallel()
+            initialize_model_parallel(new_model_parallel_size)
+            if local_rank == 0:
+                mp_split_model_rank0(model, model_full)
+                del model_full
+            else:
+                mp_split_model_receive(model)
+        else:
+            overwrite_args.pop('model_parallel_size')
+            model, model_args = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=False, overwrite_args=overwrite_args, **kwargs)
+            rank = torch.distributed.get_rank()
+            world_size = torch.distributed.get_world_size()
+            assert world_size == model_args.model_parallel_size, "world size should be equal to model_parallel_size."
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+            if rank == 0:
+                args.use_gpu_initialization = False
+                args.device = 'cpu'
+                overwrite_args['model_parallel_size'] = 1
+                model_full, args_ = cls.from_pretrained_base(name, args=args, home_path=home_path, url=url, prefix=prefix, build_only=True, overwrite_args=overwrite_args, **kwargs)
+            torch.distributed.barrier()
+            destroy_model_parallel()
+            initialize_model_parallel(model_args.model_parallel_size)
+            if rank == 0:
+                mp_merge_model_rank0(model, model_full)
+                model, model_args = model_full, args_
+            else:
+                mp_merge_model_send(model)
+                model_args.model_parallel_size = 1
+            destroy_model_parallel()
+            initialize_model_parallel(1)
+        return model, model_args
     
 def get_model(args, model_cls, **kwargs):
     """Build the model."""
@@ -392,24 +388,24 @@ def get_model(args, model_cls, **kwargs):
     from sat import mpu
 
     print_rank0(f'building {model_cls.__name__} model ...')
-    if 'params_dtype' not in kwargs:
-        if hasattr(args, 'fp16') and args.fp16:
-            params_dtype = torch.half
-        elif hasattr(args, 'bf16') and args.bf16:
-            params_dtype = torch.bfloat16
-        else:
-            params_dtype = torch.float32
-    else:
+    if 'params_dtype' in kwargs:
         # pop params_dtype from kwargs
         params_dtype = kwargs.pop('params_dtype')
-        
+
+    elif hasattr(args, 'fp16') and args.fp16:
+        params_dtype = torch.half
+    elif hasattr(args, 'bf16') and args.bf16:
+        params_dtype = torch.bfloat16
+    else:
+        params_dtype = torch.float32
     model = model_cls(args, params_dtype=params_dtype, **kwargs)
 
     if mpu.get_data_parallel_rank() == 0:
-        print_all(' > number of parameters on model parallel rank {}: {}'.format(
-            mpu.get_model_parallel_rank(),
-            sum([p.nelement() for p in model.parameters()])), flush=True)
-    
+        print_all(
+            f' > number of parameters on model parallel rank {mpu.get_model_parallel_rank()}: {sum(p.nelement() for p in model.parameters())}',
+            flush=True,
+        )
+
     if hasattr(args, 'fp16') and args.fp16:
         model.half()
     elif hasattr(args, 'bf16') and args.bf16:
@@ -421,5 +417,5 @@ def get_model(args, model_cls, **kwargs):
         model = model.to(args.device)
     except Exception as e:
         print_all(e)
-    
+
     return model

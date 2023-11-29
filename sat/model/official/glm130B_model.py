@@ -139,10 +139,7 @@ class DeepNormWithGLUMixin(BaseMixin):
         # MLP.
         mlp_output = layer.mlp(mlp_input, **kw_args)
 
-        # Second residual connection.
-        output = mlp_input * alpha + mlp_output
-
-        return output
+        return mlp_input * alpha + mlp_output
 
 
 class SelfAttentionWithFP32SoftmaxMixin(BaseMixin):

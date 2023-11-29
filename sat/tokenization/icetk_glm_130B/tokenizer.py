@@ -49,31 +49,27 @@ class AbstractTokenizer(ABC):
         pass
 
     def detokenize(self, token_ids):
-        raise NotImplementedError('detokenizer is not implemented for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(
+            f'detokenizer is not implemented for {self.name} tokenizer'
+        )
 
     @property
     def cls(self):
-        raise NotImplementedError('CLS is not provided for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(f'CLS is not provided for {self.name} tokenizer')
 
     @property
     def sep(self):
-        raise NotImplementedError('SEP is not provided for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(f'SEP is not provided for {self.name} tokenizer')
 
     @property
     def pad(self):
-        raise NotImplementedError('PAD is not provided for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(f'PAD is not provided for {self.name} tokenizer')
 
     @property
     def eod(self):
-        raise NotImplementedError('EOD is not provided for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(f'EOD is not provided for {self.name} tokenizer')
 
     @property
     def mask(self):
-        raise NotImplementedError('MASK is not provided for {} '
-                                  'tokenizer'.format(self.name))
+        raise NotImplementedError(f'MASK is not provided for {self.name} tokenizer')
 

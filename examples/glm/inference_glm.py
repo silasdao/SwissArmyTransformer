@@ -63,14 +63,14 @@ def main(model, args):
         strategy = BeamSearchStrategy(args.batch_size, length_penalty=args.length_penalty, consider_end=True, end_tokens=end_tokens, no_repeat_ngram_size=args.no_repeat_ngram_size, min_tgt_length=args.min_tgt_length)
     else:
         raise ValueError(f'unknown strategy {args.sampling_strategy}')
-    
+
     def process(raw_text):
         if args.with_id:
             query_id, raw_text = raw_text.split('\t')
         # add MASK
         generation_mask = '[gMASK]' if args.task_mask else '[MASK]'
         if 'MASK]' not in raw_text:
-            raw_text += ' ' + generation_mask
+            raw_text += f' {generation_mask}'
         seq = tokenizer.EncodeAsIds(raw_text).tokenization
         seq = [tokenizer.get_command('ENC').Id] + seq
         if not raw_text.endswith('MASK]'):
@@ -97,7 +97,7 @@ def main(model, args):
                     pass
             if mask_position == len(seq):
                 break
-            
+
             get_func = partial(get_masks_and_position_ids_glm, mask_position=mask_position, context_length=len(seq))
             output_list = []
             for tim in range(max(args.batch_size // mbz, 1)):
@@ -135,7 +135,7 @@ def main(model, args):
 
         # save
         if args.with_id:
-            full_path = os.path.join(args.output_path, query_id + '.txt')
+            full_path = os.path.join(args.output_path, f'{query_id}.txt')
         else:
             prefix = raw_text.replace('/', '')[:20]
             full_path = timed_name(prefix, '.txt', args.output_path)

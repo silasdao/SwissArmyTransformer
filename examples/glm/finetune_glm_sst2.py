@@ -42,21 +42,18 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data_b = mpu.broadcast_data(keys, data, datatype)
     # Unpack.
     tokens = data_b['sentence'].long()
     labels = data_b['label'].long()
     batch_size, seq_length = tokens.size()
-    
+
     position_ids = torch.zeros(2, seq_length, device=tokens.device, dtype=torch.long)
     torch.arange(0, seq_length, out=position_ids[0, :seq_length])
     position_ids = position_ids.unsqueeze(0)
-    
+
     attention_mask = torch.ones((batch_size, 1, seq_length, seq_length), device=tokens.device)
 
     attention_mask[...,:seq_length] -= (tokens==-1).view(batch_size, 1, 1, seq_length).float()

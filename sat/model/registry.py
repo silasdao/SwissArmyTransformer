@@ -24,7 +24,7 @@ class Registry:
         return self.member[name]
     
     def __repr__(self):
-        return 'Registry: ' + self.name + " " + str(self.member)
+        return f'Registry: {self.name} {str(self.member)}'
 
 model_registry = Registry('sat_models')
 

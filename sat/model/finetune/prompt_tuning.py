@@ -20,10 +20,20 @@ from sat.model.base_model import BaseModel, BaseMixin, non_conflict
 class PrefixTuningMixin(BaseMixin):
     def __init__(self, num_layers, hidden_size_per_attention_head, num_attention_heads, prefix_len):
         super().__init__()
-        self.prefix = torch.nn.ParameterList([
-            torch.nn.Parameter(torch.randn(2, num_attention_heads, prefix_len, hidden_size_per_attention_head)*0.01)
-            for layer_id in range(num_layers)
-        ])
+        self.prefix = torch.nn.ParameterList(
+            [
+                torch.nn.Parameter(
+                    torch.randn(
+                        2,
+                        num_attention_heads,
+                        prefix_len,
+                        hidden_size_per_attention_head,
+                    )
+                    * 0.01
+                )
+                for _ in range(num_layers)
+            ]
+        )
         self.prefix_len = prefix_len
 
     @non_conflict

@@ -39,15 +39,14 @@ class Scheduler:
         self.optimizer = optimizer
         self.param_group_field = param_group_field
         self._initial_param_group_field = f"initial_{param_group_field}"
-        if initialize:
-            for i, group in enumerate(self.optimizer.param_groups):
-                if param_group_field not in group:
+        for i, group in enumerate(self.optimizer.param_groups):
+            if initialize:
+                if param_group_field in group:
+                    group.setdefault(self._initial_param_group_field, group[param_group_field])
+                else:
                     raise KeyError(f"{param_group_field} missing from param_groups[{i}]")
-                group.setdefault(self._initial_param_group_field, group[param_group_field])
-        else:
-            for i, group in enumerate(self.optimizer.param_groups):
-                if self._initial_param_group_field not in group:
-                    raise KeyError(f"{self._initial_param_group_field} missing from param_groups[{i}]")
+            elif self._initial_param_group_field not in group:
+                raise KeyError(f"{self._initial_param_group_field} missing from param_groups[{i}]")
         self.base_values = [group[self._initial_param_group_field] for group in self.optimizer.param_groups]
         self.metric = None  # any point to having this for all?
         self.noise_range_t = noise_range_t
@@ -162,44 +161,39 @@ class CosineLRScheduler(Scheduler):
 
     def _get_lr(self, t):
         if t < self.warmup_t:
-            lrs = [self.warmup_lr_init + t * s for s in self.warmup_steps]
+            return [self.warmup_lr_init + t * s for s in self.warmup_steps]
+        if self.warmup_prefix:
+            t = t - self.warmup_t
+
+        if self.t_mul == 1:
+            i = t // self.t_initial
+            t_i = self.t_initial
+            t_curr = t - (self.t_initial * i)
+
         else:
-            if self.warmup_prefix:
-                t = t - self.warmup_t
+            i = math.floor(math.log(1 - t / self.t_initial * (1 - self.t_mul), self.t_mul))
+            t_i = self.t_mul ** i * self.t_initial
+            t_curr = t - (1 - self.t_mul ** i) / (1 - self.t_mul) * self.t_initial
+        gamma = self.decay_rate ** i
+        lr_min = self.lr_min * gamma
+        lr_max_values = [v * gamma for v in self.base_values]
 
-            if self.t_mul != 1:
-                i = math.floor(math.log(1 - t / self.t_initial * (1 - self.t_mul), self.t_mul))
-                t_i = self.t_mul ** i * self.t_initial
-                t_curr = t - (1 - self.t_mul ** i) / (1 - self.t_mul) * self.t_initial
-            else:
-                i = t // self.t_initial
-                t_i = self.t_initial
-                t_curr = t - (self.t_initial * i)
-
-            gamma = self.decay_rate ** i
-            lr_min = self.lr_min * gamma
-            lr_max_values = [v * gamma for v in self.base_values]
-
-            if self.cycle_limit == 0 or (self.cycle_limit > 0 and i < self.cycle_limit):
-                lrs = [
-                    lr_min + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * t_curr / t_i)) for lr_max in lr_max_values
-                ]
-            else:
-                lrs = [self.lr_min for _ in self.base_values]
-
-        return lrs
+        return (
+            [
+                lr_min
+                + 0.5 * (lr_max - lr_min) * (1 + math.cos(math.pi * t_curr / t_i))
+                for lr_max in lr_max_values
+            ]
+            if self.cycle_limit == 0
+            or (self.cycle_limit > 0 and i < self.cycle_limit)
+            else [self.lr_min for _ in self.base_values]
+        )
 
     def get_epoch_values(self, epoch: int):
-        if self.t_in_epochs:
-            return self._get_lr(epoch)
-        else:
-            return None
+        return self._get_lr(epoch) if self.t_in_epochs else None
 
     def get_update_values(self, num_updates: int):
-        if not self.t_in_epochs:
-            return self._get_lr(num_updates)
-        else:
-            return None
+        return self._get_lr(num_updates) if not self.t_in_epochs else None
 
     def get_cycle_length(self, cycles=0):
         if not cycles:

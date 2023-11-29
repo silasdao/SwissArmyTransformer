@@ -44,8 +44,7 @@ class HFTokenizer:
         if process_fn is not None:
             processed_text = process_fn(processed_text)
         ids = self.text_tokenizer.encode(processed_text, add_special_tokens=False)
-        tokenization = Tokenization(ids, processed_text, text)
-        return tokenization
+        return Tokenization(ids, processed_text, text)
 
     def DecodeIds(self, ids):
         if isinstance(ids, Tokenization):
@@ -75,7 +74,11 @@ class HFT5Tokenizer(HFTokenizer):
             CommandToken('sop', '<pad>', self.TokenToId("<pad>")),
             CommandToken('eop', '</s>', self.TokenToId("</s>"))
         ]
-        for i in range(100):
-            command_tokens.append(CommandToken(f'MASK{i}', f'<extra_id_{i}>', self.TokenToId(f'<extra_id_{i}>')))
+        command_tokens.extend(
+            CommandToken(
+                f'MASK{i}', f'<extra_id_{i}>', self.TokenToId(f'<extra_id_{i}>')
+            )
+            for i in range(100)
+        )
         self.command_tokens = command_tokens
 

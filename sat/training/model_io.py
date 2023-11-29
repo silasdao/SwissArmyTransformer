@@ -19,13 +19,10 @@ from sat import mpu
 from sat.helpers import print_rank0, print_all
 
 def get_checkpoint_name(checkpoints_path, iteration, release=False, zero=False):
-    if release:
-        d = 'release'
-    else:
-        d = '{:d}'.format(iteration)
+    d = 'release' if release else '{:d}'.format(iteration)
     if zero:
         dp_rank = mpu.get_data_parallel_rank()
-        d += '_zero_dp_rank_{}'.format(dp_rank)
+        d += f'_zero_dp_rank_{dp_rank}'
     return os.path.join(checkpoints_path, d, 'mp_rank_{:02d}_model_states.pt'.format(mpu.get_model_parallel_rank()))
 
 
@@ -34,7 +31,7 @@ def get_checkpoint_tracker_filename(checkpoints_path, old_checkpoint=False):
 
 def extract_model_specific_args_from_model(args, model):
     parser = argparse.ArgumentParser()
-    
+
     if hasattr(model, 'module'):
         model = model.module
     if isinstance(model, torch.nn.Module):
@@ -44,11 +41,11 @@ def extract_model_specific_args_from_model(args, model):
                     md.add_model_specific_args(parser)
                 except argparse.ArgumentError as e:
                     print(e)
-    ret = {}
-    for k in vars(parser.parse_args([])).keys():
-        if hasattr(args, k):
-            ret[k] = getattr(args, k)
-    return ret
+    return {
+        k: getattr(args, k)
+        for k in vars(parser.parse_args([]))
+        if hasattr(args, k)
+    }
 
 def extract_model_specific_args_to_dump(args, model):
     module = model.module if hasattr(model, 'module') else model
@@ -145,8 +142,7 @@ def save_checkpoint(iteration, model, optimizer,
 def save_ds_checkpoint(iteration, model, lr_scheduler, args, use_ema = False):
     """Save a model checkpoint."""
 
-    sd = {}
-    sd['iteration'] = iteration
+    sd = {'iteration': iteration}
     if lr_scheduler is not None:
         sd['client_lr_scheduler'] = lr_scheduler.state_dict()
     # rng states.
@@ -158,7 +154,9 @@ def save_ds_checkpoint(iteration, model, lr_scheduler, args, use_ema = False):
     if not use_ema:
         save_ds_checkpoint_no_optim(model, args.save, str(iteration), client_state=sd)
     else:
-        save_ds_checkpoint_no_optim(model, args.save, str(iteration)+'-ema', client_state=sd)
+        save_ds_checkpoint_no_optim(
+            model, args.save, f'{str(iteration)}-ema', client_state=sd
+        )
 
 
 def save_ds_checkpoint_no_optim(model, save_dir, tag=None, client_state={}, save_latest=True):
@@ -180,11 +178,10 @@ def get_checkpoint_iteration(load_path):
     # Read the tracker file and set the iteration.
     tracker_filename = get_checkpoint_tracker_filename(load_path)
     if not os.path.isfile(tracker_filename):
-        print_rank0('could not find the metadata file {} '.format(
-            tracker_filename))
-        raise ValueError('could not find the metadata file {}, please check --load'.format(
-            tracker_filename))
-        return 0, False, False
+        print_rank0(f'could not find the metadata file {tracker_filename} ')
+        raise ValueError(
+            f'could not find the metadata file {tracker_filename}, please check --load'
+        )
     iteration = 0
     release = False
     with open(tracker_filename, 'r') as f:
@@ -194,11 +191,11 @@ def get_checkpoint_iteration(load_path):
         except ValueError:
             release = metastring == 'release'
             if not release:
-                print_rank0('ERROR: Invalid metadata file {}. Exiting'.format(
-                    tracker_filename))
+                print_rank0(f'ERROR: Invalid metadata file {tracker_filename}. Exiting')
                 exit()
-    assert iteration > 0 or release, 'error parsing metadata file {}'.format(
-        tracker_filename)
+    assert (
+        iteration > 0 or release
+    ), f'error parsing metadata file {tracker_filename}'
 
     return iteration, release, True
 
@@ -217,11 +214,12 @@ def load_checkpoint(model, args, load_path=None, prefix=''):
     iteration, release, success = get_checkpoint_iteration(load_path)
     if not success:
         return 0
-    
+
     checkpoint_name = get_checkpoint_name(load_path, iteration, release)
     if mpu.get_data_parallel_rank() == 0:
-            print_all('global rank {} is loading checkpoint {}'.format(
-                torch.distributed.get_rank(), checkpoint_name))
+        print_all(
+            f'global rank {torch.distributed.get_rank()} is loading checkpoint {checkpoint_name}'
+        )
     sd = torch.load(checkpoint_name, map_location='cpu')
     new_sd = {'module':{}}
     for k in sd:
@@ -231,12 +229,8 @@ def load_checkpoint(model, args, load_path=None, prefix=''):
         if k.startswith(prefix):
             new_sd['module'][k[len(prefix):]] = sd['module'][k]
     sd = new_sd
-    
-    if hasattr(model, 'module'):
-        module = model.module
-    else: # inference without deepspeed
-        module = model
 
+    module = model.module if hasattr(model, 'module') else model
     # only load module, other hyperparameters are just for recording.
     missing_keys, unexpected_keys = module.load_state_dict(sd['module'], strict=False)
     if len(unexpected_keys) > 0:
@@ -277,15 +271,14 @@ def load_checkpoint(model, args, load_path=None, prefix=''):
             torch.cuda.set_rng_state(sd['cuda_rng_state'])
             mpu.get_cuda_rng_tracker().set_states(sd['rng_tracker_states'])
         except KeyError:
-            print_rank0('Unable to load optimizer from checkpoint {}, exiting. '
-                         'Specify --no-load-rng or --finetune to prevent '
-                         'attempting to load the random '
-                         'state.'.format(checkpoint_name))
+            print_rank0(
+                f'Unable to load optimizer from checkpoint {checkpoint_name}, exiting. Specify --no-load-rng or --finetune to prevent attempting to load the random state.'
+            )
             exit()
     elif args.mode == 'inference':
         module.eval()
 
     if mpu.get_data_parallel_rank() == 0:
-        print_all('> successfully loaded {}'.format(checkpoint_name))
+        print_all(f'> successfully loaded {checkpoint_name}')
     del sd
     return iteration

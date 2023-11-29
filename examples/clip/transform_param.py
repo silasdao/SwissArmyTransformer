@@ -1,6 +1,7 @@
 """
 Given a config file, transform a pretrained MAE model.
 """
+
 import os
 
 from hjson import OrderedDict
@@ -11,7 +12,7 @@ import torch
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', '127.0.0.1')
 master_port = os.getenv('MASTER_PORT', '16666')
-init_method += master_ip + ':' + master_port
+init_method += f'{master_ip}:{master_port}'
 torch.distributed.init_process_group(
         backend='nccl',
         world_size=args.world_size, rank=args.rank, init_method=init_method)
@@ -40,14 +41,14 @@ def copy_from_param(src, dst):
     dst.data = src.data
 
 def copy_layer_norm(src, dst):
-    src_ln = []
-    for k, v in src.named_parameters():
-        if 'norm' in k.lower() and type(v) is not torch.nn.Identity():
-            src_ln.append((k, v))
-    dst_ln = []
-    for k, v in dst.named_parameters():
-        if 'layernorm' in k.lower():
-            dst_ln.append((k, v))
+    src_ln = [
+        (k, v)
+        for k, v in src.named_parameters()
+        if 'norm' in k.lower() and type(v) is not torch.nn.Identity()
+    ]
+    dst_ln = [
+        (k, v) for k, v in dst.named_parameters() if 'layernorm' in k.lower()
+    ]
     assert len(src_ln) == len(dst_ln)
     for kvs, kvd in zip(src_ln, dst_ln):
         assert kvd[1].data.shape == kvs[1].data.shape

@@ -11,8 +11,12 @@ class AttnMixin(BaseMixin):
     def __init__(self, num_heads, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        self.proj_l = nn.ModuleList([nn.Linear(num_heads, num_heads) for i in range(num_layers)])
-        self.proj_w = nn.ModuleList([nn.Linear(num_heads, num_heads) for i in range(num_layers)])
+        self.proj_l = nn.ModuleList(
+            [nn.Linear(num_heads, num_heads) for _ in range(num_layers)]
+        )
+        self.proj_w = nn.ModuleList(
+            [nn.Linear(num_heads, num_heads) for _ in range(num_layers)]
+        )
 
     def attention_fn(self, query_layer, key_layer, value_layer, attention_mask,
                        attention_dropout=None, log_attention_weights=None, scaling_attention_score=True, **kwargs):
@@ -22,13 +26,13 @@ class AttnMixin(BaseMixin):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if log_attention_weights is not None:
             attention_scores += log_attention_weights
-        
+
         attention_scores = self.proj_l[kwargs['layer_id']](attention_scores.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         if not (attention_mask.shape[-2] == 1 and (attention_mask > 0).all()):
             # if auto-regressive, skip
             attention_scores = torch.mul(attention_scores, attention_mask) - \
-                            10000.0 * (1.0 - attention_mask)
+                                10000.0 * (1.0 - attention_mask)
 
         attention_probs = F.softmax(attention_scores, dim=-1)
 
@@ -41,8 +45,7 @@ class AttnMixin(BaseMixin):
             else:
                 attention_probs = attention_dropout(attention_probs)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
-        return context_layer
+        return torch.matmul(attention_probs, value_layer)
 
     def reinit(self, parent_model=None):
         # init with identity matrix so that pretrained weights with standard_attn can be reused
@@ -53,8 +56,18 @@ class AttnMixin(BaseMixin):
 class EncForward(BaseMixin):
     def __init__(self, dim, num_layers, init_values=1e-4):
         super().__init__()
-        self.gamma_1 = nn.ParameterList([nn.Parameter(init_values * torch.ones((dim)), requires_grad=True) for i in range(num_layers)])
-        self.gamma_2 = nn.ParameterList([nn.Parameter(init_values * torch.ones((dim)), requires_grad=True) for i in range(num_layers)])
+        self.gamma_1 = nn.ParameterList(
+            [
+                nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
+                for _ in range(num_layers)
+            ]
+        )
+        self.gamma_2 = nn.ParameterList(
+            [
+                nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
+                for _ in range(num_layers)
+            ]
+        )
     def layer_forward(self, hidden_states, mask, *args, **kw_args):
         layer = self.transformer.layers[kw_args['layer_id']]
 
@@ -71,10 +84,7 @@ class EncForward(BaseMixin):
         # MLP.
         mlp_output = layer.mlp(layernorm_output, **kw_args)
 
-        # Second residual connection.
-        output = layernorm_input + self.gamma_2[kw_args['layer_id']] * mlp_output
-
-        return output
+        return layernorm_input + self.gamma_2[kw_args['layer_id']] * mlp_output
 
 from sat.model.transformer import standard_attention
 from sat.mpu.utils import split_tensor_along_last_dim
@@ -82,8 +92,18 @@ from sat.mpu.utils import split_tensor_along_last_dim
 class DecForward(BaseMixin):
     def __init__(self, dim, num_layers, init_values=1e-4):
         super().__init__()
-        self.gamma_1 = nn.ParameterList([nn.Parameter(init_values * torch.ones((dim)), requires_grad=True) for i in range(num_layers)])
-        self.gamma_2 = nn.ParameterList([nn.Parameter(init_values * torch.ones((dim)), requires_grad=True) for i in range(num_layers)])
+        self.gamma_1 = nn.ParameterList(
+            [
+                nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
+                for _ in range(num_layers)
+            ]
+        )
+        self.gamma_2 = nn.ParameterList(
+            [
+                nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
+                for _ in range(num_layers)
+            ]
+        )
     
     def position_embedding_forward(self, position_ids, **kwargs):
         return 0
@@ -110,10 +130,7 @@ class DecForward(BaseMixin):
         # MLP.
         mlp_output = layer.mlp(layernorm_output, **kw_args)
 
-        # Second residual connection.
-        output = layernorm_input + self.gamma_2[kw_args['layer_id']] * mlp_output
-
-        return output
+        return layernorm_input + self.gamma_2[kw_args['layer_id']] * mlp_output
 
     def cross_attention_forward(self, hidden_states, cross_attention_mask, encoder_outputs, **kw_args):
         # adapted from https://github.com/THUDM/sat/blob/d8c9d1e0a9bb2af1e1d26a68b35f16d84aafcc2f/sat/mpu/transformer.py#L216
@@ -179,7 +196,7 @@ class CaiT(EncoderDecoderModel):
         override_attrs = ['num_layers', 'hidden_size', 'num_attention_heads', 'layernorm_order',
                             'max_sequence_length', 'inner_hidden_size', 'hidden_size_per_attention_head']
         for name in override_attrs:
-            dec_attr = getattr(dec_args, 'dec_' + name, None)
+            dec_attr = getattr(dec_args, f'dec_{name}', None)
             if dec_attr is not None:  # else use encoder-config
                 setattr(dec_args, name, dec_attr)
         decoder = CaiTDecoder(dec_args, transformer=transformer, parallel_output=parallel_output, layernorm_epsilon=layernorm_epsilon)

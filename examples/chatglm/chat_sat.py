@@ -74,8 +74,8 @@ def chat(model, tokenizer,
         history = []
     prompt = ""
     for i, (old_query, response) in enumerate(history):
-        prompt += "[Round {}]\n问：{}\n答：{}\n".format(i, old_query, response)
-    prompt += "[Round {}]\n问：{}\n答：".format(len(history), query)
+        prompt += f"[Round {i}]\n问：{old_query}\n答：{response}\n"
+    prompt += f"[Round {len(history)}]\n问：{query}\n答："
     # ---------------
     # tokenizer, this is an example of huggingface tokenizer.
     # input str, output['input_ids'] = tensor([[tokenized str, gmask, sop]])
@@ -97,7 +97,7 @@ def chat(model, tokenizer,
         get_masks_and_position_ids=get_func,
         strategy=strategy
     )[0] # drop memory
-    
+
     # ---------------
     # port from inference_glm.py, more general than chat mode
     # clip -1s and fill back generated things into seq
@@ -116,7 +116,7 @@ def chat(model, tokenizer,
 
     response = tokenizer.decode(output_list[0])
     response = process_response(response).split('答：')[-1].strip()
-    history = history + [(query, response)]
+    history += [(query, response)]
     return response, history
 
 if __name__ == "__main__":

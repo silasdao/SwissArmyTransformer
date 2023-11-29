@@ -47,10 +47,7 @@ class Attention(nn.Module):
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        if return_attention:
-            return x, attn
-        else:
-            return x
+        return (x, attn) if return_attention else x
 
 class Block(nn.Module):
 
@@ -233,7 +230,7 @@ class VisionTransformer(nn.Module):
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
         self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1))
         self.img_size = img_size
-        if mid_pe_size == None:
+        if mid_pe_size is None:
             self.has_mid_pe = False
             print('No mid pe')
         else:
@@ -275,8 +272,7 @@ class VisionTransformer(nn.Module):
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
-        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
-        return scale_pos_embed
+        return torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
 
     def InterpolateMidPosEmbed(self, pos_embed, img_size=(800, 1344)):
         # import pdb;pdb.set_trace()
@@ -293,8 +289,7 @@ class VisionTransformer(nn.Module):
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2).contiguous().view(D,B,new_P_H*new_P_W,E)
-        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=2)
-        return scale_pos_embed
+        return torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=2)
 
     def forward_features(self, x):
         # import pdb;pdb.set_trace()
@@ -386,9 +381,8 @@ class VisionTransformer(nn.Module):
         if return_attention == True:
             # return self.forward_selfattention(x)
             return self.forward_return_all_selfattention(x)
-        else:
-            x = self.forward_features(x)
-            return x
+        x = self.forward_features(x)
+        return x
 
 
 def _conv_filter(state_dict, patch_size=16):

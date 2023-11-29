@@ -11,11 +11,10 @@ for k in list(state_dict.keys()):
         del state_dict[k]
 for k in state_dict:
     dtype = state_dict[k].dtype
-    if dtype != torch.float16 and dtype != torch.float32:
+    if dtype == torch.float16:
+        eva = eva.half()
+    elif dtype != torch.float32:
         raise Exception("???")
-    else:
-        if dtype == torch.float16:
-            eva = eva.half()
     break
 eva.load_state_dict(state_dict, strict=False)
 # x = torch.randn(2, 3, 224, 224).half().cuda()
@@ -60,7 +59,7 @@ import deepspeed
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', '127.0.0.1')
 master_port = os.getenv('MASTER_PORT', '16666')
-init_method += master_ip + ':' + master_port
+init_method += f'{master_ip}:{master_port}'
 torch.distributed.init_process_group(
         backend='nccl',
         world_size=args.world_size, rank=args.rank, init_method=init_method)
@@ -88,27 +87,17 @@ def copy_layer_param(src, dst):
         assert (dst_dic[k].data == src_dic[k].data).all()
 
 def copy_layer_norm(src, dst):
-    src_ln = []
-    for k, v in src.named_parameters():
-        if 'norm' in k.lower():
-            src_ln.append((k, v))
-    dst_ln = []
-    for k, v in dst.named_parameters():
-        if 'layernorm' in k.lower():
-            dst_ln.append((k, v))
+    src_ln = [(k, v) for k, v in src.named_parameters() if 'norm' in k.lower()]
+    dst_ln = [
+        (k, v) for k, v in dst.named_parameters() if 'layernorm' in k.lower()
+    ]
     assert len(src_ln) == len(dst_ln)
     for kvs, kvd in zip(src_ln, dst_ln):
         assert kvd[1].data.shape == kvs[1].data.shape
         kvd[1].data = kvs[1].data
         assert (kvd[1].data == kvs[1].data).all()
-    src_ln = []
-    for k, v in src.named_parameters():
-        if 'ffn_ln' in k.lower():
-            src_ln.append((k, v))
-    dst_ln = []
-    for k, v in dst.named_parameters():
-        if 'ffn_ln' in k.lower():
-            dst_ln.append((k, v))
+    src_ln = [(k, v) for k, v in src.named_parameters() if 'ffn_ln' in k.lower()]
+    dst_ln = [(k, v) for k, v in dst.named_parameters() if 'ffn_ln' in k.lower()]
     assert len(src_ln) == len(dst_ln)
     for kvs, kvd in zip(src_ln, dst_ln):
         assert kvd[1].data.shape == kvs[1].data.shape

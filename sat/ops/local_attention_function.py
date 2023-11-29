@@ -17,9 +17,7 @@ class similarFunction(Function):
         ctx.save_for_backward(x_ori, x_loc)
         ctx.kHW = (kH, kW)
         ctx.casual_mask = casual_mask
-        output = similar_forward(x_ori, x_loc, kH, kW, casual_mask)
-
-        return output
+        return similar_forward(x_ori, x_loc, kH, kW, casual_mask)
 
     @staticmethod
     #@once_differentiable
@@ -40,9 +38,7 @@ class weightingFunction(Function):
         ctx.save_for_backward(x_ori, x_weight)
         ctx.kHW = (kH, kW)
         ctx.casual_mask = casual_mask
-        output = weighting_forward(x_ori, x_weight, kH, kW, casual_mask)
-
-        return output
+        return weighting_forward(x_ori, x_weight, kH, kW, casual_mask)
 
     @staticmethod
     #@once_differentiable

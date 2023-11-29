@@ -56,7 +56,7 @@ def tar_file_iterator_with_meta(fileobj, meta_names, skip_meta=r"__[^/]*__($|/)"
     """
     stream = tarfile.open(fileobj=fileobj, mode="r|*")
     data_dir, filename = fileobj.name.rsplit('/', 1)
-    
+
     meta_data = {} # {id: {meta_name: meta_value, meta_name2: meta_value2, ...}}
     for meta_name in meta_names:
         meta_file_name = filename.split('.')[0] + '.meta.jsonl'
@@ -72,11 +72,11 @@ def tar_file_iterator_with_meta(fileobj, meta_names, skip_meta=r"__[^/]*__($|/)"
                         print_rank0(f'Error in loading jsonl {meta_file_name}, lineno {lineno}: {line}', level='DEBUG')
                         continue
                 for item in meta_list:
-                    if not item['key'] in meta_data:
+                    if item['key'] not in meta_data:
                         meta_data[item['key']] = {}
                     if meta_name in item:
                         meta_data[item['key']][meta_name] = item[meta_name]
-    
+
     for tarinfo in stream:
         fname = tarinfo.name
         try:
@@ -97,20 +97,18 @@ def tar_file_iterator_with_meta(fileobj, meta_names, skip_meta=r"__[^/]*__($|/)"
                 data = (stream.extractfile(tarinfo).read().decode() + suffix).encode()
             else:
                 data = stream.extractfile(tarinfo).read()
-            result = dict(fname=fname, data=data)
-            yield result
-            
+            yield dict(fname=fname, data=data)
             if fname.endswith('.id'):
                 fid = fname.split('.')[0]
                 meta_data_fid = meta_data.get(fid, {})
                 for meta_name in meta_names:
-                    meta_fname = fid + '.' + meta_name
+                    meta_fname = f'{fid}.{meta_name}'
                     meta = meta_data_fid.get(meta_name, None)
                     yield dict(fname=meta_fname, data=meta)
             stream.members = []
         except Exception as exn:
             if hasattr(exn, "args") and len(exn.args) > 0:
-                exn.args = (exn.args[0] + " @ " + str(fileobj),) + exn.args[1:]
+                exn.args = (f"{exn.args[0]} @ {str(fileobj)}", ) + exn.args[1:]
             if handler(exn):
                 continue
             else:
@@ -143,8 +141,7 @@ def tar_file_expander_with_meta(data, meta_names, handler=reraise_exception):
 def tarfile_samples_with_meta(src, meta_names, handler=reraise_exception):
     streams = url_opener(src, handler=handler)
     files = tar_file_expander_with_meta(streams, meta_names, handler)
-    samples = group_by_keys(files, handler=handler)
-    return samples  
+    return group_by_keys(files, handler=handler)  
         
 class MetaDistributedWebDataset(DataPipeline):
     '''WebDataset with meta information files
@@ -171,11 +168,7 @@ class MetaDistributedWebDataset(DataPipeline):
                             other_paths.extend([os.path.join(cur_dir,f)]*n)
             # print(f'Adding dataset paths {",".join(other_paths)}')
             from braceexpand import braceexpand
-            if len(path) > 0: # not "" 
-                path = list(braceexpand(path)) + other_paths
-            else:
-                path = other_paths
-        
+            path = list(braceexpand(path)) + other_paths if len(path) > 0 else other_paths
         tarfile_samples = partial(tarfile_samples_with_meta, meta_names=meta_names)
         tarfile_to_samples = pipelinefilter(tarfile_samples)
 
@@ -186,7 +179,7 @@ class MetaDistributedWebDataset(DataPipeline):
                 shuffle_buffer = 1
         except Exception:
             pass
-        
+
         super().__init__(
             ConfiguredResampledShards(path, seed, nshards=nshards),
             tarfile_to_samples(),
@@ -238,20 +231,17 @@ def gopen_boto3(url, mode="rb", bufsize=8192*2):
     endpoint_url = os.environ.get("S3_ENDPOINT_URL", None)
     access_key = os.environ.get("S3_ACCESS_KEY_ID", None)
     secret_key = os.environ.get("S3_SECRET_ACCESS_KEY", None)
-    
-    if mode[0] == "r":
-        s3_client = boto3.client('s3',
-            endpoint_url=endpoint_url,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key
-            )
-        bucket, key = url.split('/', 1)
-        response = s3_client.get_object(Bucket=bucket, Key=key) # Range optional
-        return response['Body']
-    # elif mode[0] == "w":
-    #     pass
-    else:
+
+    if mode[0] != "r":
         raise ValueError(f"{mode}: unknown mode")
+    s3_client = boto3.client('s3',
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key
+        )
+    bucket, key = url.split('/', 1)
+    response = s3_client.get_object(Bucket=bucket, Key=key) # Range optional
+    return response['Body']
 
 from webdataset.gopen import gopen_schemes
 gopen_schemes['rclone'] = gopen_rclone

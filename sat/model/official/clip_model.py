@@ -40,8 +40,7 @@ class ImageMixin(BaseMixin):
         layer = self.transformer.layers[kw_args['layer_id']]
         if kw_args['layer_id'] == 0:
             hidden_states = self.pre_layernorm(hidden_states)
-        output = layer(hidden_states, mask, *args, **kw_args)
-        return output
+        return layer(hidden_states, mask, *args, **kw_args)
 
     def final_forward(self, logits, **kw_args):
         return self.visual_projection(logits[:, 0])
@@ -79,8 +78,7 @@ class TextMixin(BaseMixin):
         # causal mask
         mask = mask - mask.triu(1)
         layer = self.transformer.layers[kw_args['layer_id']]
-        output = layer(hidden_states, mask, *args, **kw_args)
-        return output
+        return layer(hidden_states, mask, *args, **kw_args)
 
 class TextEncoder(BaseModel):
     def __init__(self, args, layernorm_epsilon=1e-5, activation_func=QuickGELUActivation()):
@@ -101,7 +99,7 @@ class CLIP(nn.Module):
         override_attrs = ['vocab_size', 'num_layers', 'hidden_size', 'num_attention_heads', 'layernorm_order',
                             'max_sequence_length', 'inner_hidden_size', 'hidden_size_per_attention_head']
         for name in override_attrs:
-            text_attr = getattr(text_args, 'text_' + name, None)
+            text_attr = getattr(text_args, f'text_{name}', None)
             if text_attr is not None:  # else use encoder-config
                 setattr(text_args, name, text_attr)
         self.text_encoder = TextEncoder(text_args, layernorm_epsilon=layernorm_epsilon)

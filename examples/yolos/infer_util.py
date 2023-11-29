@@ -48,10 +48,10 @@ def make_coco_transforms(image_set, args):
         T.ToTensor(),
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    
-    scales = [800]
 
-    if image_set == 'val' or image_set == 'train':
+    if image_set in ['val', 'train']:
+        scales = [800]
+
         return T.Compose([
             T.RandomResize([scales[-1]], max_size=scales[-1] * 1333 // 800),
             normalize,
@@ -132,7 +132,7 @@ def increment_path(path, exist_ok=False, sep='', mkdir=False):
         i = [int(m.groups()[0]) for m in matches if m]  # indices
         n = max(i) + 1 if i else 2  # increment number
         path = Path(f"{path}{sep}{n}{suffix}")  # update path
-    dir = path if path.suffix == '' else path.parent  # directory
+    dir = path if not path.suffix else path.parent
     if not dir.exists() and mkdir:
         dir.mkdir(parents=True, exist_ok=True)  # make directory
     return path

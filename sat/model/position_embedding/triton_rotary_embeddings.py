@@ -181,42 +181,42 @@ class FastRotaryEmbedding(torch.nn.Module):
 
     def _update_cos_sin_cache(self, seqlen, position_id, device=None, dtype=None):
 
-        if (
-            seqlen > self._seq_len_cached
-        ):
-            self._seq_len_cached = seqlen
+        if seqlen <= self._seq_len_cached:
+            return
+        self._seq_len_cached = seqlen
             # We want fp32 here, not self.inv_freq.dtype, since the model could be loaded in bf16
             # And the output of arange can be quite large, so bf16 would lose a lot of precision.
             # However, for compatibility reason, we add an option to use the dtype of self.inv_freq.
-            if self.pos_idx_in_fp32:
-                t = torch.arange(seqlen, device=device, dtype=torch.float32)
+        if self.pos_idx_in_fp32:
+            t = torch.arange(seqlen, device=device, dtype=torch.float32)
                 # We want fp32 here as well since inv_freq will be multiplied with t, and the output
                 # will be large. Having it in bf16 will lose a lot of precision and cause the
                 # cos & sin output to change significantly.
                 # We want to recompute self.inv_freq if it was not loaded in fp32
-                if self.inv_freq.dtype != torch.float32:
-                    inv_freq = self._compute_inv_freq(device=device)
-                else:
-                    inv_freq = self.inv_freq
-            else:
-                t = torch.arange(seqlen, device=device, dtype=self.inv_freq.dtype)
-                inv_freq = self.inv_freq
-            freqs = torch.einsum("i,j->ij", t, inv_freq)
-            if self.scale is None:
-                self._cos_cached = torch.cos(freqs).to(dtype)
-                self._sin_cached = torch.sin(freqs).to(dtype)
-                
-            else:
-                power = (
-                    torch.arange(seqlen, dtype=self.scale.dtype, device=self.scale.device)
-                    - seqlen // 2
-                ) / self.scale_base
-                scale = self.scale.to(device=power.device) ** rearrange(power, "s -> s 1")
-                # We want the multiplication by scale to happen in fp32
-                self._cos_cached = (torch.cos(freqs) * scale).to(dtype)
-                self._sin_cached = (torch.sin(freqs) * scale).to(dtype)
-                self._cos_k_cached = (torch.cos(freqs) / scale).to(dtype)
-                self._sin_k_cached = (torch.sin(freqs) / scale).to(dtype)
+            inv_freq = (
+                self._compute_inv_freq(device=device)
+                if self.inv_freq.dtype != torch.float32
+                else self.inv_freq
+            )
+        else:
+            t = torch.arange(seqlen, device=device, dtype=self.inv_freq.dtype)
+            inv_freq = self.inv_freq
+        freqs = torch.einsum("i,j->ij", t, inv_freq)
+        if self.scale is None:
+            self._cos_cached = torch.cos(freqs).to(dtype)
+            self._sin_cached = torch.sin(freqs).to(dtype)
+
+        else:
+            power = (
+                torch.arange(seqlen, dtype=self.scale.dtype, device=self.scale.device)
+                - seqlen // 2
+            ) / self.scale_base
+            scale = self.scale.to(device=power.device) ** rearrange(power, "s -> s 1")
+            # We want the multiplication by scale to happen in fp32
+            self._cos_cached = (torch.cos(freqs) * scale).to(dtype)
+            self._sin_cached = (torch.sin(freqs) * scale).to(dtype)
+            self._cos_k_cached = (torch.cos(freqs) / scale).to(dtype)
+            self._sin_k_cached = (torch.sin(freqs) / scale).to(dtype)
 
     def forward(
         self,

@@ -22,7 +22,7 @@ def load_hf_dataset(path, process_fn, columns=None, cache_dir='~/.cache/huggingf
     dataset_name, sub_name, split = parse_huggingface_path(path)
     datasets.config.HF_DATASETS_OFFLINE = int(offline)
     if transformer_name:
-        dataset_path = cache_dir + '/' + dataset_name + "_" + sub_name + "_" + split + "_" + transformer_name + ".data"
+        dataset_path = f'{cache_dir}/{dataset_name}_{sub_name}_{split}_{transformer_name}.data'
     else:
         dataset_path = None
 

@@ -37,8 +37,15 @@ def save_multiple_images(imgs, path, debug=True):
         for i in range(len(imgs)):
             save_image(imgs[i], os.path.join(path, f'{i}.jpg'), normalize=True)
             os.chmod(os.path.join(path,f'{i}.jpg'), stat.S_IRWXO+stat.S_IRWXG+stat.S_IRWXU)
-        save_image(torch.cat(imgs, dim=0), os.path.join(path,f'concat.jpg'), normalize=True)
-        os.chmod(os.path.join(path,f'concat.jpg'), stat.S_IRWXO+stat.S_IRWXG+stat.S_IRWXU)
+        save_image(
+            torch.cat(imgs, dim=0),
+            os.path.join(path, 'concat.jpg'),
+            normalize=True,
+        )
+        os.chmod(
+            os.path.join(path, 'concat.jpg'),
+            stat.S_IRWXO + stat.S_IRWXG + stat.S_IRWXU,
+        )
 
 def generate_continually(func, input_source='interactive'):
     if input_source == 'interactive':

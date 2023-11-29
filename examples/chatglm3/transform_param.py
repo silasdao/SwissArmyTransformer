@@ -3,20 +3,28 @@ from transformers import AutoTokenizer, AutoModel, AutoConfig
 
 model_type = "chatglm3-6b-base"
 
-tokenizer = AutoTokenizer.from_pretrained("THUDM/"+model_type, trust_remote_code=True)
-chatglm = AutoModel.from_pretrained("THUDM/"+model_type, trust_remote_code=True).half().cuda()
-config = AutoConfig.from_pretrained("THUDM/"+model_type, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(
+    f"THUDM/{model_type}", trust_remote_code=True
+)
+chatglm = (
+    AutoModel.from_pretrained(f"THUDM/{model_type}", trust_remote_code=True)
+    .half()
+    .cuda()
+)
+config = AutoConfig.from_pretrained(
+    f"THUDM/{model_type}", trust_remote_code=True
+)
 
 import argparse
 args = argparse.Namespace(
-    base_scale=config.rope_ratio if hasattr(config, 'rope_ratio') else 1.,
+    base_scale=config.rope_ratio if hasattr(config, 'rope_ratio') else 1.0,
     num_layers=config.num_layers,
     vocab_size=config.padded_vocab_size,
     hidden_size=config.hidden_size,
     num_attention_heads=config.num_attention_heads,
     max_sequence_length=config.seq_length,
-    hidden_dropout=0.,
-    attention_dropout=0.,
+    hidden_dropout=0.0,
+    attention_dropout=0.0,
     inner_hidden_size=config.ffn_hidden_size,
     num_multi_query_heads=config.multi_query_group_num,
     layernorm_epsilon=config.layernorm_epsilon,
@@ -33,8 +41,8 @@ args = argparse.Namespace(
     save=model_type,
     deepspeed=None,
     mode='inference',
-    tokenizer_type="THUDM/"+model_type
-    )
+    tokenizer_type=f"THUDM/{model_type}",
+)
 
 model = ChatGLM3Model(args).half()
 

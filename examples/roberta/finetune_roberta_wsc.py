@@ -33,10 +33,7 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data_b = mpu.broadcast_data(keys, data, datatype)
     # Unpack.
@@ -146,10 +143,14 @@ import en_core_web_sm
 def create_dataset_function(path, args):
     def process_fn(row):
         nlp = en_core_web_sm.load()
-        pad = lambda a: a[0:args.sample_length] if len(a) > args.sample_length else a + [1] * (args.sample_length-len(a))
+        pad = (
+            lambda a: a[: args.sample_length]
+            if len(a) > args.sample_length
+            else a + [1] * (args.sample_length - len(a))
+        )
         text = row['text']
         query = row['span1_text']
-        if query[-1]=='.' or query[-1] == ',':
+        if query[-1] in ['.', ',']:
             query = query[:-1]
         sentence = nlp(text)
         encoded_text = tokenizer(text)['input_ids']
@@ -183,7 +184,7 @@ def create_dataset_function(path, args):
         noun_chunks = [
             nc
             for nc in noun_chunks
-            if (nc.lemma_ != "-PRON-" and not all(tok.pos_ == "PRON" for tok in nc))
+            if nc.lemma_ != "-PRON-" and any(tok.pos_ != "PRON" for tok in nc)
         ]
         excl_txt = [query.lower()]
         filtered_chunks = []

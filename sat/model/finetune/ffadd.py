@@ -17,13 +17,10 @@ class FFADDMixin(BaseMixin):
         # Actual trainable parameters
         self.r = r
 
-        self.ffadd_linear = nn.ModuleList([
-            nn.ModuleList()
-            for layer_id in range(layer_num)
-        ])
+        self.ffadd_linear = nn.ModuleList([nn.ModuleList() for _ in range(layer_num)])
 
         if layer_range is None:
-            layer_range = [i for i in range(layer_num)]
+            layer_range = list(range(layer_num))
         self.layer_range = layer_range
         for i in layer_range:
             self.ffadd_linear[i].append(torch.nn.Linear(hidden_size, r, bias=True))

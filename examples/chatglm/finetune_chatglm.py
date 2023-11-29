@@ -37,11 +37,7 @@ class FineTuneChat(ChatModel):
         if self.args.use_lora:
             enable.extend(['matrix_A', 'matrix_B'])
         for n, p in self.named_parameters():
-            flag = False
-            for e in enable:
-                if e.lower() in n.lower():
-                    flag = True
-                    break
+            flag = any(e.lower() in n.lower() for e in enable)
             if not flag:
                 p.requires_grad_(False)
 
@@ -54,16 +50,13 @@ def get_batch(data_iterator, args, timers):
 
     # Broadcast data.
     timers('data loader').start()
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
+    data = next(data_iterator) if data_iterator is not None else None
     timers('data loader').stop()
     data_b = mpu.broadcast_data(keys, data, datatype)
     # Unpack.
     tokens = data_b['input_ids'].long()
     labels = data_b['labels'].long()
-    
+
     return tokens, labels
 
 

@@ -54,7 +54,7 @@ import torch
 init_method = 'tcp://'
 master_ip = os.getenv('MASTER_ADDR', '127.0.0.1')
 master_port = os.getenv('MASTER_PORT', '12468')
-init_method += master_ip + ':' + master_port
+init_method += f'{master_ip}:{master_port}'
 torch.distributed.init_process_group(
         backend='nccl',
         world_size=swiss_args.world_size, rank=swiss_args.rank, init_method=init_method)

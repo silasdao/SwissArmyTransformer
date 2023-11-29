@@ -173,7 +173,7 @@ class ChatModel(nn.Module, GenerationMixin):
         outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
         response = tokenizer.decode(outputs)
         response = self.process_response(response)
-        history = history + [(query, response)]
+        history += [(query, response)]
         return response, history
     
     @torch.no_grad()
@@ -184,5 +184,4 @@ class ChatModel(nn.Module, GenerationMixin):
         inputs = tokenizer(queries, return_tensors="pt", padding=True)
         inputs = {k:v.to(self.device) for k, v in inputs.items()}
         outputs = self.generate(**inputs, **gen_kwargs)
-        texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        return texts
+        return tokenizer.batch_decode(outputs, skip_special_tokens=True)

@@ -40,13 +40,12 @@ def update_mems(hiddens, mems, max_memory_length):
     with torch.no_grad():
         if new_memory_length <= query_length:
             return hiddens[:, :, -new_memory_length:]
-        else:
-            if mems.shape[1] < hiddens.shape[1]:
-                mems = mems.expand(-1, hiddens.shape[1], -1, -1)
-            return torch.cat(
-                (mems[:, :, -new_memory_length+query_length:], hiddens),
-                dim=2
-            )
+        if mems.shape[1] < hiddens.shape[1]:
+            mems = mems.expand(-1, hiddens.shape[1], -1, -1)
+        return torch.cat(
+            (mems[:, :, -new_memory_length+query_length:], hiddens),
+            dim=2
+        )
 
 
 def filling_sequence(

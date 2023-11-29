@@ -70,7 +70,7 @@ class GLM130BTokenizer:
 
     @staticmethod
     def get_tab_token():
-        return f"<|tab|>"
+        return "<|tab|>"
 
     @property
     def text_tokenizer(self):
@@ -123,7 +123,7 @@ class GLM130BTokenizer:
         """
         text = self._preprocess(text, linebreak, whitespaces)
         if not add_dummy_prefix:
-            text = "<n>" + text
+            text = f"<n>{text}"
         tmp = self._get_text_tokenizer(encode_special_tokens=special_tokens).encode(text)
         tokens = [x + self.num_image_tokens for x in tmp]
         return tokens if add_dummy_prefix else tokens[2:]
@@ -149,14 +149,14 @@ class GLM130BTokenizer:
         """
         text = self._preprocess(text, linebreak, whitespaces)
         if not add_dummy_prefix:
-            text = "<n>" + text
+            text = f"<n>{text}"
         tokens = self._get_text_tokenizer(encode_special_tokens=special_tokens).tokenize(text)
         return tokens if add_dummy_prefix else tokens[2:]
 
     def __getitem__(self, x: Union[int, str]):
         if isinstance(x, int):
             if x < self.num_image_tokens:
-                return "<image_{}>".format(x)
+                return f"<image_{x}>"
             else:
                 return self.text_tokenizer.convert_id_to_token(x - self.num_image_tokens)
         elif isinstance(x, str):
@@ -193,11 +193,13 @@ class _IceTokenizer(AbstractTokenizer):
             self.special_tokens = {}
             self.special_tokens_decoder = {}
             return
-        self.special_tokens = dict((tok, self.num_tokens + i) for i, tok in enumerate(special_tokens))
+        self.special_tokens = {
+            tok: self.num_tokens + i for i, tok in enumerate(special_tokens)
+        }
         self.special_tokens_decoder = {v: k for k, v in self.special_tokens.items()}
         # for k, v in self.special_tokens.items():
         #     self.tokenizer.decoder[v] = "\u0120" + k
-        logger.info("Special tokens {}".format(self.special_tokens))
+        logger.info(f"Special tokens {self.special_tokens}")
 
     def get_command(self, token):
         return self.special_tokens[token]
@@ -240,9 +242,11 @@ class _IceTokenizer(AbstractTokenizer):
 
     def detokenize(self, token_ids):
         split = [-1]
-        for i, token in enumerate(token_ids):
-            if token in self.special_tokens_decoder:
-                split.append(i)
+        split.extend(
+            i
+            for i, token in enumerate(token_ids)
+            if token in self.special_tokens_decoder
+        )
         split.append(len(token_ids))
         text = ""
         for i in range(len(split) - 1):

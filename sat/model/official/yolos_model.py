@@ -43,8 +43,7 @@ class DetHeadMixin(BaseMixin):
         logits = logits[:, -self.num_det_tokens:]
         outputs_class = self.class_embed(logits)
         outputs_coord = self.bbox_embed(logits).sigmoid()
-        out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
-        return out
+        return {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
 
 class YOLOS(ViTModel):
     def __init__(self, args, transformer=None, parallel_output=True, layernorm_epsilon=1e-6, **kwargs):

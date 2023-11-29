@@ -50,7 +50,7 @@ class SentencePieceTokenizer:
     def load_spm_model(self):
         """load sentencepiece model and parse vocab"""
         if not os.path.exists(self.spm_model) and not self.spm_model.endswith('.model'):
-            self.spm_model = self.spm_model + '.model'
+            self.spm_model = f'{self.spm_model}.model'
         self.sp = spm.SentencePieceProcessor()
         self.sp.Load(self.spm_model)
         self.vocab_size = self.num_text_tokens = len(self.sp)
@@ -73,13 +73,12 @@ class SentencePieceTokenizer:
         dne = not os.path.exists(model_path)
         # check if path.model exists
         if dne and not model_path.endswith('.model'):
-            dne = not os.path.exists(model_path + '.model')
+            dne = not os.path.exists(f'{model_path}.model')
         return not dne
 
     def encode(self, text):
         """convert text to sentencepiece Ids"""
-        tokens = self.sp.EncodeAsIds(text)
-        return tokens
+        return self.sp.EncodeAsIds(text)
 
     def IdToToken(self, Id):
         """convert Id to sentencpiece token"""

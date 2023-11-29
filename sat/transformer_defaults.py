@@ -40,8 +40,7 @@ def standard_attention(query_layer, key_layer, value_layer, attention_mask,
         else:
             attention_probs = attention_dropout(attention_probs)
 
-    context_layer = torch.matmul(attention_probs, value_layer)
-    return context_layer
+    return torch.matmul(attention_probs, value_layer)
 
 def attention_fn_default(query_layer, key_layer, value_layer, attention_mask,
                        attention_dropout=None, log_attention_weights=None, scaling_attention_score=True, **kwargs):
@@ -55,21 +54,25 @@ def attention_fn_default(query_layer, key_layer, value_layer, attention_mask,
     is_low_triangle = (attention_mask == torch.ones_like(attention_mask, dtype=torch.float).tril()).all()
     is_full = (attention_mask is None) or (attention_mask > 0).all()
 
-    if int(torch.__version__.split('.')[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
-        # Pytorch 2.0 attention uses very much memory if attention_mask is float, and has NaN bug if attention_mask is None.
-        dropout_p = 0. if attention_dropout is None or not attention_dropout.training else attention_dropout.p
-        return torch.nn.functional.scaled_dot_product_attention(
-            query_layer, key_layer, value_layer, 
-            attn_mask=None,
-            dropout_p=dropout_p,
-            is_causal=not is_full
-        )
-    else:
+    if (
+        int(torch.__version__.split('.')[0]) < 2
+        or not scaling_attention_score
+        or not is_full
+        and not is_low_triangle
+    ):
         return standard_attention(
             query_layer, key_layer, value_layer, attention_mask,
             attention_dropout=attention_dropout, log_attention_weights=log_attention_weights,
             scaling_attention_score=scaling_attention_score, **kwargs
         )
+    # Pytorch 2.0 attention uses very much memory if attention_mask is float, and has NaN bug if attention_mask is None.
+    dropout_p = 0. if attention_dropout is None or not attention_dropout.training else attention_dropout.p
+    return torch.nn.functional.scaled_dot_product_attention(
+        query_layer, key_layer, value_layer, 
+        attn_mask=None,
+        dropout_p=dropout_p,
+        is_causal=not is_full
+    )
 
 def attention_forward_default(self, hidden_states, mask, **kw_args):
     self = self.transformer.layers[kw_args['layer_id']].attention
@@ -132,8 +135,7 @@ def mlp_forward_default(self, hidden_states, **kw_args):
     self = self.transformer.layers[kw_args['layer_id']].mlp
     intermediate_parallel = self.dense_h_to_4h(hidden_states)
     intermediate_parallel = self.activation_func(intermediate_parallel)
-    output = self.dense_4h_to_h(intermediate_parallel)
-    return output
+    return self.dense_4h_to_h(intermediate_parallel)
 
 def word_embedding_forward_default(self, input_ids, output_cross_layer, **kw_args):
     return self.transformer.word_embeddings(input_ids)
@@ -154,7 +156,7 @@ def layer_forward_default(self, hidden_states, mask, *args, **kw_args):
         mask: [(1, 1), seq_len, seq_len]
     '''
     self = self.transformer.layers[kw_args['layer_id']]
-    
+
     # Layer norm at the begining of the transformer layer.
     attention_input = self.input_layernorm(hidden_states)
     # Self attention.
@@ -164,7 +166,6 @@ def layer_forward_default(self, hidden_states, mask, *args, **kw_args):
     if self.layernorm_order == 'sandwich':
         attention_output = self.third_layernorm(attention_output)
 
-    # DropPath for attention
     if self.training and self.drop_path > 0.:
         if mpu.get_cuda_rng_tracker is not None:
             # drop_path must use model parallel rng tracker
@@ -175,7 +176,7 @@ def layer_forward_default(self, hidden_states, mask, *args, **kw_args):
                 random_tensor = (1-self.drop_path
                                   + torch.rand((attention_output.shape[0],), dtype=attention_output.dtype, device=attention_output.device)).floor_() / (1-self.drop_path)
                 attention_output = random_tensor.view(-1, 1, 1) * attention_output
-    
+
     # Residual connection.
     if self.layernorm_order == 'post':
         hidden_states = attention_input + attention_output
@@ -217,13 +218,11 @@ def layer_forward_default(self, hidden_states, mask, *args, **kw_args):
                                   + torch.rand((mlp_output.shape[0],), dtype=mlp_output.dtype, device=mlp_output.device)).floor_() / (1-self.drop_path)
                 mlp_output = random_tensor.view(-1, 1, 1) * mlp_output
 
-    # Second residual connection.
-    if self.layernorm_order == 'post':
-        output = mlp_input + mlp_output
-    else:
-        output = hidden_states + mlp_output
-
-    return output
+    return (
+        mlp_input + mlp_output
+        if self.layernorm_order == 'post'
+        else hidden_states + mlp_output
+    )
 
 HOOKS_DEFAULT = {
     'attention_fn': attention_fn_default,
